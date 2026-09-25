@@ -3,7 +3,7 @@
   "title": "NPC Sheet Importer",
   "description": "Imports Planestone sheet files (YAML/JSON) as pf2e NPCs.",
   "version": "0.1.0",
-  "compatibility": { "minimum": "13", "verified": "13", "maximum": "14" },
+  "compatibility": { "minimum": "13", "verified": "14", "maximum": "14" },
   "relationships": {
     "systems": [{ "id": "pf2e", "type": "system", "compatibility": { "minimum": "7.2.0" } }]
   },
