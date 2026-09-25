@@ -19,8 +19,10 @@ npm run build      # production build into dist/
 `npm run dev` copies to the path in `.env`:
 
 ```
-FOUNDRY_VTT_PATH="C:\Users\tripl\AppData\Local\FoundryVTT\Data\modules\npc-sheet-importer"
+FOUNDRY_VTT_PATH="C:/Users/tripl/AppData/Local/FoundryVTT/Data/modules/npc-sheet-importer"
 ```
+
+Use forward slashes: dotenv turns `\n` in a double-quoted value into a newline.
 
 Releases work like emotive-hud: publishing a GitHub release runs `.github/workflows/publish.yml`, which builds and attaches `module.json` and `module.zip`.
 
