@@ -1,5 +1,5 @@
 import CONSTANTS from "../constants";
-import { executeImport, prepareImport, type ImportPlan, type ImportResult } from "../importer";
+import { actorFolderOptions, executeImport, prepareImport, type ImportPlan, type ImportResult } from "../importer";
 import { localize } from "../utils";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -12,7 +12,7 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     classes: [`${CONSTANTS.MODULE_ID}`],
     tag: "div",
     window: { title: `${CONSTANTS.MODULE_ID}.dialog.title`, icon: "fa-solid fa-file-import", resizable: true },
-    position: { width: 560, height: "auto" },
+    position: { width: 560, height: 520 },
     actions: {
       import: ImportDialog.onImport,
       reset: ImportDialog.onReset,
@@ -28,10 +28,13 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
   private plan: ImportPlan | null = null;
   private results: ImportResult[] = [];
   private busy = false;
+  // empty string is the actors root
+  private folderId = "";
 
   async _prepareContext() {
     const plan = this.plan;
     return {
+      folders: actorFolderOptions().map((folder) => ({ ...folder, selected: folder.id === this.folderId })),
       stage: this.stage,
       isPick: this.stage === "pick",
       isPreview: this.stage === "preview",
@@ -65,6 +68,8 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       const file = input.files?.[0];
       if (file) void this.loadFile(file);
     });
+    const folderSelect = this.element.querySelector("select[name=folder]") as HTMLSelectElement | null;
+    folderSelect?.addEventListener("change", () => (this.folderId = folderSelect.value));
   }
 
   private async loadFile(file: File) {
@@ -86,7 +91,7 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     if (!this.plan || this.busy) return;
     this.busy = true;
     await this.render();
-    this.results = await executeImport(this.plan);
+    this.results = await executeImport(this.plan, { folderId: this.folderId || null });
     this.busy = false;
     this.stage = "results";
     const created = this.results.filter((result) => result.ok).length;
