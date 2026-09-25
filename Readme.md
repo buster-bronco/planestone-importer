@@ -2,7 +2,7 @@
 
 A Foundry VTT module that imports **Planestone sheet** files (YAML or JSON) as pf2e NPC actors. Built for my own game.
 
-- Foundry **v13**, pf2e **7.2.x**
+- Foundry **v13–v14**, pf2e **7.2.x**
 - GM-only **Import Sheet** button in the Actors sidebar
 - Preview before anything is created: errors block the import, warnings don't
 
