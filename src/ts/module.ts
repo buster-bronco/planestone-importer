@@ -1,32 +1,21 @@
 import "../styles/style.scss";
 import CONSTANTS from "./constants";
 import ImportDialog from "./apps/ImportDialog";
-import { executeImport, prepareImport } from "./importer";
+import { executeImport, prepareImport, type ImportOptions } from "./importer";
 import { getGame, isCurrentUserGM, localize } from "./utils";
-
-function registerSettings() {
-  getGame().settings.register(CONSTANTS.MODULE_ID, CONSTANTS.SETTINGS.FOLDER_NAME, {
-    name: `${CONSTANTS.MODULE_ID}.settings.folderName.name`,
-    hint: `${CONSTANTS.MODULE_ID}.settings.folderName.hint`,
-    scope: "world",
-    config: true,
-    type: new foundry.data.fields.StringField({ initial: "Imported NPCs", blank: true }),
-  });
-}
 
 function openDialog() {
   return new ImportDialog().render({ force: true });
 }
 
 // text → created actors, for macros
-async function importText(text: string) {
+async function importText(text: string, options: ImportOptions = {}) {
   const plan = await prepareImport(text);
   if (plan.errors.length) return { plan, results: [] };
-  return { plan, results: await executeImport(plan) };
+  return { plan, results: await executeImport(plan, options) };
 }
 
 Hooks.once("init", () => {
-  registerSettings();
   getGame().modules.get(CONSTANTS.MODULE_ID).api = { openDialog, prepareImport, executeImport, importText };
 });
 

@@ -16,10 +16,6 @@ export function isCurrentUserGM(): boolean {
   return !!getGame().user?.isGM;
 }
 
-export function getGameSetting<T>(key: string): T {
-  return getGame().settings.get(CONSTANTS.MODULE_ID, key) as T;
-}
-
 export function localize(key: string): string {
   return getGame().i18n.localize(`${CONSTANTS.MODULE_ID}.${key}`);
 }

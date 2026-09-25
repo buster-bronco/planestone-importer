@@ -20,10 +20,6 @@ export const CONSTANTS = {
 
   // packs searched for [[term]] marks
   LINK_PACKS: ["pf2e.conditionitems", "pf2e.actionspf2e"],
-
-  SETTINGS: {
-    FOLDER_NAME: "folderName",
-  },
 } as const;
 
 export default CONSTANTS;

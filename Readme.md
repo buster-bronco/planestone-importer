@@ -30,16 +30,16 @@ Releases work like emotive-hud: publishing a GitHub release runs `.github/workfl
 
 1. Enable the module in a pf2e world.
 2. Actors sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file.
-3. Check the preview (actors, item counts, warnings) → **Import**.
+3. Check the preview (actors, item counts, warnings), pick a destination folder (defaults to the Actors root) → **Import**.
 
-Imported actors go into the folder set in module settings (default `Imported NPCs`, blank for top level). Each actor is flagged with `flags.npc-sheet-importer.{schemaVersion, source, freeArchetype}`.
+Each imported actor is flagged with `flags.npc-sheet-importer.{schemaVersion, source, freeArchetype}`.
 
 Macro API:
 
 ```js
 const api = game.modules.get("npc-sheet-importer").api;
 api.openDialog();
-const { plan, results } = await api.importText(yamlString);
+const { plan, results } = await api.importText(yamlString, { folderId: null }); // folderId optional, null = root
 ```
 
 ## Planestone sheet format (v1)

@@ -6,7 +6,7 @@ import { applyLinkMarks, type LinkTarget } from "./linkMarks";
 import { normalizePackId, PackIndex } from "./packIndex";
 import { parseSheetText } from "./parse";
 import { isHomebrewStrike, type ActorDoc, type EquippedWeaponItem } from "./schema";
-import { getGame, getGameSetting } from "./utils";
+import { getGame } from "./utils";
 
 export interface PreparedWeapon {
   item: EquippedWeaponItem;
@@ -155,17 +155,41 @@ async function addWeaponStrike(actor: any, prepared: PreparedActor, weapon: Prep
   if (!item.keepInInventory) await created.delete();
 }
 
-async function targetFolderId(): Promise<string | null> {
-  const name = getGameSetting<string>(CONSTANTS.SETTINGS.FOLDER_NAME)?.trim();
-  if (!name) return null;
-  const existing = getGame().folders.find((folder: any) => folder.type === "Actor" && folder.name === name);
-  return (existing ?? (await Folder.implementation.create({ name, type: "Actor" }))).id;
+export interface ImportOptions {
+  // actor folder id; null or missing imports at the root
+  folderId?: string | null;
+}
+
+export interface FolderOption {
+  id: string;
+  label: string;
+}
+
+// actor folders in tree order, nested names indented
+export function actorFolderOptions(): FolderOption[] {
+  const byParent = new Map<string | null, any[]>();
+  for (const folder of getGame().folders.filter((f: any) => f.type === "Actor")) {
+    const parent = folder.folder?.id ?? null;
+    byParent.set(parent, [...(byParent.get(parent) ?? []), folder]);
+  }
+
+  const options: FolderOption[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    const children = (byParent.get(parent) ?? []).sort((a, b) => a.name.localeCompare(b.name));
+    for (const folder of children) {
+      options.push({ id: folder.id, label: `${"   ".repeat(depth)}${folder.name}` });
+      walk(folder.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return options;
 }
 
 // creates each actor on its own; a failed actor is rolled back and reported
-export async function executeImport(plan: ImportPlan): Promise<ImportResult[]> {
+export async function executeImport(plan: ImportPlan, options: ImportOptions = {}): Promise<ImportResult[]> {
   if (plan.errors.length) throw new Error("import plan has errors");
-  const folder = await targetFolderId();
+  // folder may have been deleted since the dialog opened
+  const folder = options.folderId && getGame().folders.get(options.folderId) ? options.folderId : null;
   const results: ImportResult[] = [];
 
   for (const prepared of plan.actors) {

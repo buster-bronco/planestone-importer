@@ -1,40 +1,52 @@
 <section class="npc-importer">
   {{#if isPick}}
-    <p class="hint">{{localize "npc-sheet-importer.dialog.hint"}}</p>
-    <label class="file-pick">
-      <i class="fa-solid fa-file-arrow-up"></i>
-      <span>{{#if busy}}{{localize "npc-sheet-importer.dialog.reading"}}{{else}}{{localize "npc-sheet-importer.dialog.choose"}}{{/if}}</span>
-      <input type="file" accept=".yaml,.yml,.json" {{#if busy}}disabled{{/if}}>
-    </label>
+    <div class="body">
+      <p class="hint">{{localize "npc-sheet-importer.dialog.hint"}}</p>
+      <label class="file-pick">
+        <i class="fa-solid fa-file-arrow-up"></i>
+        <span>{{#if busy}}{{localize "npc-sheet-importer.dialog.reading"}}{{else}}{{localize "npc-sheet-importer.dialog.choose"}}{{/if}}</span>
+        <input type="file" accept=".yaml,.yml,.json" {{#if busy}}disabled{{/if}}>
+      </label>
+    </div>
   {{/if}}
 
   {{#if isPreview}}
-    <h3 class="file-name">{{fileName}}</h3>
+    <div class="body">
+      <h3 class="file-name">{{fileName}}</h3>
 
-    {{#if errors.length}}
-      <div class="messages errors">
-        <h4>{{localize "npc-sheet-importer.dialog.errors"}}</h4>
-        <ul>{{#each errors}}<li>{{this}}</li>{{/each}}</ul>
-      </div>
-    {{/if}}
+      {{#if errors.length}}
+        <div class="messages errors">
+          <h4>{{localize "npc-sheet-importer.dialog.errors"}}</h4>
+          <ul>{{#each errors}}<li>{{this}}</li>{{/each}}</ul>
+        </div>
+      {{/if}}
 
-    {{#if actors.length}}
-      <table class="actors">
-        <thead><tr><th>{{localize "npc-sheet-importer.dialog.name"}}</th><th>{{localize "npc-sheet-importer.dialog.level"}}</th><th>{{localize "npc-sheet-importer.dialog.items"}}</th></tr></thead>
-        <tbody>
-          {{#each actors}}
-            <tr><td>{{name}}</td><td>{{level}}</td><td>{{itemCount}}{{#if weaponCount}} ({{weaponCount}} {{localize "npc-sheet-importer.dialog.weapons"}}){{/if}}</td></tr>
-          {{/each}}
-        </tbody>
-      </table>
-    {{/if}}
+      {{#if actors.length}}
+        <table class="actors">
+          <thead><tr><th>{{localize "npc-sheet-importer.dialog.name"}}</th><th>{{localize "npc-sheet-importer.dialog.level"}}</th><th>{{localize "npc-sheet-importer.dialog.items"}}</th></tr></thead>
+          <tbody>
+            {{#each actors}}
+              <tr><td>{{name}}</td><td>{{level}}</td><td>{{itemCount}}{{#if weaponCount}} ({{weaponCount}} {{localize "npc-sheet-importer.dialog.weapons"}}){{/if}}</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      {{/if}}
 
-    {{#if warnings.length}}
-      <div class="messages warnings">
-        <h4>{{localize "npc-sheet-importer.dialog.warnings"}}</h4>
-        <ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul>
-      </div>
-    {{/if}}
+      {{#if warnings.length}}
+        <div class="messages warnings">
+          <h4>{{localize "npc-sheet-importer.dialog.warnings"}}</h4>
+          <ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul>
+        </div>
+      {{/if}}
+    </div>
+
+    <div class="form-group folder-pick">
+      <label for="npc-sheet-importer-folder">{{localize "npc-sheet-importer.dialog.folder"}}</label>
+      <select id="npc-sheet-importer-folder" name="folder">
+        <option value="">{{localize "npc-sheet-importer.dialog.rootFolder"}}</option>
+        {{#each folders}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+      </select>
+    </div>
 
     <footer class="buttons">
       <button type="button" data-action="reset"><i class="fa-solid fa-rotate-left"></i> {{localize "npc-sheet-importer.dialog.back"}}</button>
@@ -43,13 +55,15 @@
   {{/if}}
 
   {{#if isResults}}
-    <ul class="results">
-      {{#each results}}
-        <li class="{{#if ok}}ok{{else}}failed{{/if}}">
-          {{#if ok}}<i class="fa-solid fa-check"></i> {{{link}}}{{else}}<i class="fa-solid fa-xmark"></i> {{name}}: {{error}}{{/if}}
-        </li>
-      {{/each}}
-    </ul>
+    <div class="body">
+      <ul class="results">
+        {{#each results}}
+          <li class="{{#if ok}}ok{{else}}failed{{/if}}">
+            {{#if ok}}<i class="fa-solid fa-check"></i> {{{link}}}{{else}}<i class="fa-solid fa-xmark"></i> {{name}}: {{error}}{{/if}}
+          </li>
+        {{/each}}
+      </ul>
+    </div>
     <footer class="buttons">
       <button type="button" data-action="reset"><i class="fa-solid fa-file-import"></i> {{localize "npc-sheet-importer.dialog.another"}}</button>
     </footer>

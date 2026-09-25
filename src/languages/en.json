@@ -1,6 +1,8 @@
 {
   "npc-sheet-importer": {
-    "sidebar": { "button": "Import Sheet" },
+    "sidebar": {
+      "button": "Import Sheet"
+    },
     "dialog": {
       "title": "Import Planestone Sheet",
       "hint": "Choose a Planestone sheet file (.yaml or .json). Nothing is created until you confirm the preview.",
@@ -15,14 +17,12 @@
       "back": "Back",
       "import": "Import",
       "importing": "Importing…",
-      "another": "Import another"
+      "another": "Import another",
+      "folder": "Folder",
+      "rootFolder": "(Actors root)"
     },
-    "notify": { "created": "NPCs created" },
-    "settings": {
-      "folderName": {
-        "name": "Import folder",
-        "hint": "Actor folder for imported NPCs. Leave blank to import at the top level."
-      }
+    "notify": {
+      "created": "NPCs created"
     }
   }
 }
