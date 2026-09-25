@@ -10,8 +10,7 @@ function registerSettings() {
     hint: `${CONSTANTS.MODULE_ID}.settings.folderName.hint`,
     scope: "world",
     config: true,
-    type: String,
-    default: "Imported NPCs",
+    type: new foundry.data.fields.StringField({ initial: "Imported NPCs", blank: true }),
   });
 }
 

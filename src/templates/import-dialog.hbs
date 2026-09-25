@@ -46,7 +46,7 @@
     <ul class="results">
       {{#each results}}
         <li class="{{#if ok}}ok{{else}}failed{{/if}}">
-          {{#if ok}}<i class="fa-solid fa-check"></i> <a class="content-link" draggable="true" data-link data-uuid="{{actorUuid}}" data-type="Actor"><i class="fa-solid fa-user"></i>{{name}}</a>{{else}}<i class="fa-solid fa-xmark"></i> {{name}}: {{error}}{{/if}}
+          {{#if ok}}<i class="fa-solid fa-check"></i> {{{link}}}{{else}}<i class="fa-solid fa-xmark"></i> {{name}}: {{error}}{{/if}}
         </li>
       {{/each}}
     </ul>

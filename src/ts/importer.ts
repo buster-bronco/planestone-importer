@@ -159,7 +159,7 @@ async function targetFolderId(): Promise<string | null> {
   const name = getGameSetting<string>(CONSTANTS.SETTINGS.FOLDER_NAME)?.trim();
   if (!name) return null;
   const existing = getGame().folders.find((folder: any) => folder.type === "Actor" && folder.name === name);
-  return (existing ?? (await Folder.create({ name, type: "Actor" }))).id;
+  return (existing ?? (await Folder.implementation.create({ name, type: "Actor" }))).id;
 }
 
 // creates each actor on its own; a failed actor is rolled back and reported
@@ -172,7 +172,7 @@ export async function executeImport(plan: ImportPlan): Promise<ImportResult[]> {
     const { meta } = prepared.doc;
     let actor: any = null;
     try {
-      actor = await Actor.create({
+      actor = await Actor.implementation.create({
         name: meta.name,
         type: "npc",
         folder,

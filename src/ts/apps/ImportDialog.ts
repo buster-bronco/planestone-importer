@@ -47,12 +47,19 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
         itemCount: actor.items.length + actor.weapons.length,
         weaponCount: actor.weapons.length,
       })),
-      results: this.results,
+      results: await Promise.all(this.results.map(async (result) => ({ ...result, link: await this.resultLink(result) }))),
     };
   }
 
-  _onRender(context: unknown, options: unknown) {
-    super._onRender(context, options);
+  // document.toAnchor() renders foundry's own content-link markup
+  private async resultLink(result: ImportResult): Promise<string | null> {
+    if (!result.actorUuid) return null;
+    const actor = await fromUuid(result.actorUuid);
+    return actor ? actor.toAnchor().outerHTML : result.name;
+  }
+
+  async _onRender(context: unknown, options: unknown) {
+    await super._onRender(context, options);
     const input = this.element.querySelector("input[type=file]") as HTMLInputElement | null;
     input?.addEventListener("change", () => {
       const file = input.files?.[0];

@@ -5,7 +5,7 @@ interface IndexEntry {
   _id: string;
   name: string;
   type: string;
-  uuid?: string;
+  uuid: string;
 }
 
 export interface LookupHit {
@@ -28,11 +28,8 @@ export class PackIndex {
     if (cached) return cached;
     const pack = game.packs.get(packId);
     if (!pack) return null;
-    const index = await pack.getIndex();
-    const entries: IndexEntry[] = [...index].map((entry: IndexEntry) => ({
-      ...entry,
-      uuid: entry.uuid ?? `Compendium.${pack.collection}.${pack.documentName}.${entry._id}`,
-    }));
+    // index entries carry their own uuid
+    const entries: IndexEntry[] = [...(await pack.getIndex())];
     this.indexes.set(packId, entries);
     return entries;
   }
@@ -46,7 +43,7 @@ export class PackIndex {
       for (const entry of entries ?? []) {
         if (entry.name.toLowerCase() !== wanted) continue;
         if (types && !types.includes(entry.type)) continue;
-        hits.push({ uuid: entry.uuid!, pack: packId });
+        hits.push({ uuid: entry.uuid, pack: packId });
       }
     }
     if (!hits.length) return null;
@@ -59,7 +56,7 @@ export class PackIndex {
     for (const packId of CONSTANTS.LINK_PACKS) {
       for (const entry of (await this.entries(packId)) ?? []) {
         const key = entry.name.toLowerCase();
-        if (!targets.has(key)) targets.set(key, { uuid: entry.uuid!, name: entry.name });
+        if (!targets.has(key)) targets.set(key, { uuid: entry.uuid, name: entry.name });
       }
     }
     return targets;
