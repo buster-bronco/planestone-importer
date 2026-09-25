@@ -1,0 +1,46 @@
+schemaVersion: 1
+kind: actorBatch
+
+spellLists:
+  - id: armada-occult
+    tradition: occult
+    basis: spellDC
+    dcOrAttack: 20
+    slots:
+      cantrips: [{ origin: compendiumRef, lookup: { name: "Daze" } }]
+
+actors:
+  - meta: { name: Armada Deckhand, level: 1 }
+    core:
+      traits: [humanoid, human]
+      abilities: { str: 3, dex: 2, con: 2, int: 0, wis: 1, cha: 0 }
+      perception: { mod: 6 }
+      ac: 16
+      saves: { fortitude: 8, reflex: 7, will: 5 }
+      hp: { value: 20 }
+      speed: { value: 25, other: [{ type: swim, value: 15 }] }
+      skills: { named: { athletics: 7 } }
+    items:
+      - origin: equippedWeapon
+        lookup: { name: "Dagger" }
+        proficiency: trained
+      - origin: compendiumRef
+        refType: action
+        lookup: { name: "Grab" }
+
+  - meta: { name: Armada Hexer, level: 3 }
+    core:
+      traits: [humanoid, human]
+      abilities: { str: 0, dex: 2, con: 1, int: 4, wis: 1, cha: 2 }
+      perception: { mod: 9 }
+      ac: 18
+      saves: { fortitude: 7, reflex: 9, will: 11 }
+      hp: { value: 40 }
+      speed: { value: 25 }
+    items:
+      - origin: equippedWeapon
+        lookup: { name: "Staff" }
+        proficiency: trained
+        abilityOverride: int
+        damageAbilityOverride: int
+    spellcasting: armada-occult
