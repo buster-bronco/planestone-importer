@@ -16,6 +16,7 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     actions: {
       import: ImportDialog.onImport,
       reset: ImportDialog.onReset,
+      loadText: ImportDialog.onLoadText,
     },
   };
 
@@ -28,6 +29,8 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
   private plan: ImportPlan | null = null;
   private results: ImportResult[] = [];
   private busy = false;
+  // pasted text survives re-renders and going back
+  private pasted = "";
   // empty string is the actors root
   private folderId = "";
   // folder document hooks, registered while the dialog is open
@@ -43,6 +46,7 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       isResults: this.stage === "results",
       busy: this.busy,
       fileName: this.fileName,
+      pasted: this.pasted,
       errors: plan?.errors ?? [],
       warnings: plan?.warnings ?? [],
       canImport: !!plan && !plan.errors.length && plan.actors.length > 0 && !this.busy,
@@ -70,6 +74,8 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       const file = input.files?.[0];
       if (file) void this.loadFile(file);
     });
+    const textarea = this.element.querySelector("textarea[name=sheetText]") as HTMLTextAreaElement | null;
+    textarea?.addEventListener("input", () => (this.pasted = textarea.value));
     const folderSelect = this.element.querySelector("select[name=folder]") as HTMLSelectElement | null;
     folderSelect?.addEventListener("change", () => (this.folderId = folderSelect.value));
   }
@@ -101,11 +107,15 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
   }
 
   private async loadFile(file: File) {
-    this.fileName = file.name;
+    await this.load(file.name, () => file.text());
+  }
+
+  private async load(name: string, read: () => Promise<string>) {
+    this.fileName = name;
     this.busy = true;
     await this.render();
     try {
-      this.plan = await prepareImport(await file.text());
+      this.plan = await prepareImport(await read());
     } catch (err) {
       console.error(CONSTANTS.DEBUG_PREFIX, err);
       this.plan = { actors: [], errors: [(err as Error).message], warnings: [] };
@@ -125,6 +135,12 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     const created = this.results.filter((result) => result.ok).length;
     ui.notifications.info(`${localize("notify.created")}: ${created}/${this.results.length}`);
     await this.render();
+  }
+
+  static async onLoadText(this: ImportDialog) {
+    if (this.busy || !this.pasted.trim()) return;
+    const text = this.pasted;
+    await this.load(localize("dialog.pastedText"), async () => text);
   }
 
   static async onReset(this: ImportDialog) {

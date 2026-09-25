@@ -1,11 +1,11 @@
 schemaVersion: 1
 kind: actor
 meta:
-  name: Dranura Border Warden
+  name: Border Warden
   actorType: npc
   level: 4
   freeArchetype: false
-  source: "Dranura Saga, Ep. 19"
+  source: "Dev"
 
 core:
   traits: [humanoid]

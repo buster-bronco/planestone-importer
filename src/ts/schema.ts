@@ -18,6 +18,14 @@ const damageRoll = z.object({
   damageType: z.string().min(1),
 });
 
+const proficiency = z.enum(["trained", "expert", "master", "legendary"]);
+const actionType = z.union([z.enum(["passive", "free", "reaction"]), z.literal(1), z.literal(2), z.literal(3)]);
+const actionCategory = z.enum(["offensive", "defensive", "interaction"]);
+const runes = z.object({
+  potency: z.number().int().min(0).max(4).default(0),
+  striking: z.number().int().min(0).max(3).default(0),
+});
+
 // ---------------------------------------------------------------------------
 // items (§3)
 // ---------------------------------------------------------------------------
@@ -31,13 +39,8 @@ const compendiumRef = z.object({
 const equippedWeapon = z.object({
   origin: z.literal("equippedWeapon"),
   lookup,
-  proficiency: z.enum(["trained", "expert", "master", "legendary"]),
-  runes: z
-    .object({
-      potency: z.number().int().min(0).max(4).default(0),
-      striking: z.number().int().min(0).max(3).default(0),
-    })
-    .default({}),
+  proficiency,
+  runes: runes.default({}),
   abilityOverride: abilityKey.nullable().default(null),
   damageAbilityOverride: abilityKey.nullable().default(null),
   keepInInventory: z.boolean().default(true),
@@ -48,8 +51,8 @@ const homebrewAction = z
     origin: z.literal("homebrew"),
     type: z.enum(["action", "passive"]),
     name: z.string().min(1),
-    actionType: z.union([z.enum(["passive", "free", "reaction"]), z.literal(1), z.literal(2), z.literal(3)]).optional(),
-    category: z.enum(["offensive", "defensive", "interaction"]).optional(),
+    actionType: actionType.optional(),
+    category: actionCategory.optional(),
     trigger: z.string().min(1).optional(),
     traits: z.array(z.string()).default([]),
     description: z.string().default(""),
@@ -107,7 +110,13 @@ const item = z
 // actor (§2)
 // ---------------------------------------------------------------------------
 
-const core = z.object({
+export const resistanceEntry = z.object({ type: z.string(), value: z.number().int(), exceptions: z.array(z.string()).default([]) });
+export const weaknessEntry = z.object({ type: z.string(), value: z.number().int() });
+export const immunityEntry = z.object({ type: z.string() });
+export const otherSpeedEntry = z.object({ type: z.string(), value: z.number().int().min(0) });
+export const loreEntry = z.object({ name: z.string().min(1), mod: z.number().int() });
+
+export const coreSchema = z.object({
   traits: z.array(z.string()).default([]),
   rarity: z.enum(["common", "uncommon", "rare", "unique"]).default("common"),
   size: z.string().default("medium"),
@@ -138,30 +147,30 @@ const core = z.object({
   }),
   speed: z.object({
     value: z.number().int().min(0),
-    other: z.array(z.object({ type: z.string(), value: z.number().int().min(0) })).default([]),
+    other: z.array(otherSpeedEntry).default([]),
   }),
   skills: z
     .object({
       named: z.record(z.string(), z.number().int()).default({}),
-      lore: z.array(z.object({ name: z.string().min(1), mod: z.number().int() })).default([]),
+      lore: z.array(loreEntry).default([]),
     })
     .default({}),
-  resistances: z
-    .array(z.object({ type: z.string(), value: z.number().int(), exceptions: z.array(z.string()).default([]) }))
-    .default([]),
-  weaknesses: z.array(z.object({ type: z.string(), value: z.number().int() })).default([]),
-  immunities: z.array(z.object({ type: z.string() })).default([]),
+  resistances: z.array(resistanceEntry).default([]),
+  weaknesses: z.array(weaknessEntry).default([]),
+  immunities: z.array(immunityEntry).default([]),
+});
+
+export const metaSchema = z.object({
+  name: z.string().min(1),
+  actorType: z.literal("npc").default("npc"),
+  level: z.number().int().min(-1).max(30),
+  freeArchetype: z.boolean().default(false),
+  source: z.string().optional(),
 });
 
 const actorBody = z.object({
-  meta: z.object({
-    name: z.string().min(1),
-    actorType: z.literal("npc").default("npc"),
-    level: z.number().int().min(-1).max(30),
-    freeArchetype: z.boolean().default(false),
-    source: z.string().optional(),
-  }),
-  core,
+  meta: metaSchema,
+  core: coreSchema,
   items: z.array(item).default([]),
   // spellcasting is reserved for a later version
   spellcasting: z.unknown().optional(),
@@ -169,6 +178,57 @@ const actorBody = z.object({
 
 export type ActorDoc = z.infer<typeof actorBody>;
 export type CoreData = ActorDoc["core"];
+
+// ---------------------------------------------------------------------------
+// actor patch (§6)
+// ---------------------------------------------------------------------------
+
+const patchTarget = z
+  .object({ name: z.string().min(1).optional(), uuid: z.string().min(1).optional() })
+  .strict()
+  .refine((target) => !(target.name && target.uuid), "target takes a name or a uuid, not both");
+
+// every field items.update can touch; which ones apply depends on the matched item
+export const itemPatchFields = z
+  .object({
+    name: z.string().min(1),
+    description: z.string(),
+    trigger: z.string().min(1),
+    traits: z.array(z.string()),
+    actionType,
+    category: actionCategory.nullable(),
+    attackBonus: z.number().int(),
+    damageRolls: z.array(damageRoll).min(1),
+    attackEffects: z.array(z.string()),
+    proficiency,
+    runes: runes.partial(),
+    abilityOverride: abilityKey.nullable(),
+    damageAbilityOverride: abilityKey.nullable(),
+  })
+  .partial()
+  .strict();
+
+export type ItemPatchFields = z.infer<typeof itemPatchFields>;
+
+// set/add/remove keys are dotted sheet paths, checked in patch/paths.ts
+// target is optional; the sheet it's applied from is the real target
+const actorPatchBody = z.object({
+  target: patchTarget.optional(),
+  set: z.record(z.string(), z.unknown()).default({}),
+  add: z.record(z.string(), z.array(z.unknown())).default({}),
+  remove: z.record(z.string(), z.array(z.string().min(1))).default({}),
+  items: z
+    .object({
+      add: z.array(item).default([]),
+      remove: z.array(z.string().min(1)).default([]),
+      update: z.array(z.object({ match: z.string().min(1), set: itemPatchFields })).default([]),
+      replace: z.array(z.object({ match: z.string().min(1), with: item })).default([]),
+    })
+    .strict()
+    .default({}),
+});
+
+export type ActorPatchDoc = z.infer<typeof actorPatchBody>;
 
 // ---------------------------------------------------------------------------
 // spell list (§5, reserved)
@@ -193,6 +253,7 @@ const envelope = { schemaVersion: z.literal(1) };
 export const sheetFile = z.discriminatedUnion("kind", [
   actorBody.extend({ ...envelope, kind: z.literal("actor") }),
   spellListBody.extend({ ...envelope, kind: z.literal("spellList") }),
+  actorPatchBody.extend({ ...envelope, kind: z.literal("actorPatch") }),
   z.object({
     ...envelope,
     kind: z.literal("actorBatch"),

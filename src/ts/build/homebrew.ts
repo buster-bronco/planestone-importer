@@ -9,7 +9,7 @@ export function toHtml(text: string): string {
 }
 
 // pf2e reaction layout: trigger, rule, effect
-function reactionHtml(trigger: string, description: string): string {
+export function reactionHtml(trigger: string, description: string): string {
   const body = toHtml(description);
   const effect = body.startsWith("<p>") ? body.replace("<p>", "<p><strong>Effect</strong> ") : body;
   return `<p><strong>Trigger</strong> ${trigger}</p><hr />${effect}`;

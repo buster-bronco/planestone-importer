@@ -29,8 +29,9 @@ Releases work like emotive-hud: publishing a GitHub release runs `.github/workfl
 ## Usage
 
 1. Enable the module in a pf2e world.
-2. Actors sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file.
+2. Actors sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file, or paste a sheet and hit **Load text**.
 3. Check the preview (actors, item counts, warnings), pick a destination folder (defaults to the Actors root) → **Import**.
+4. To change an existing NPC later, use **Patch** in its sheet header (see [Patches](#patches-actorpatch)).
 
 Each imported actor is flagged with `flags.npc-sheet-importer.{schemaVersion, source, freeArchetype}`.
 
@@ -40,6 +41,8 @@ Macro API:
 const api = game.modules.get("npc-sheet-importer").api;
 api.openDialog();
 const { plan, results } = await api.importText(yamlString, { folderId: null }); // folderId optional, null = root
+api.openPatchDialog(actor);
+const { plan, result } = await api.applyPatch(actor, patchYaml); // actor document or uuid
 ```
 
 ## Planestone sheet format (v1)
@@ -164,6 +167,67 @@ slots: { cantrips: [...], rank1: [...] }
 ```
 
 Spell lists are validated, and an actor's `spellcasting: <id>` must point at one. They aren't imported yet.
+
+### Patches (`actorPatch`)
+
+A patch changes an existing NPC, including ones this module didn't create. Open the NPC's sheet and click **Patch** in the header (GM only, world actors only). Paste the patch or load it from a file, check the preview, then **Apply**. The sidebar importer only creates actors and rejects patches. See [`examples/patch.yaml`](examples/patch.yaml).
+
+```yaml
+schemaVersion: 1
+kind: actorPatch
+target: { name: Dranura Border Warden }   # optional safety check
+set:
+  meta.level: 5
+  core.ac: 23
+  core: { saves: { will: 13 } }            # nested objects work too
+  core.skills.named.stealth: 10            # null removes the skill
+  core.traits: [humanoid, human]           # a list replaces the whole list
+add:
+  core.resistances: [{ type: cold, value: 5 }]
+  core.skills.lore: [{ name: Sailing, mod: 7 }]
+remove:
+  core.weaknesses: [fire]
+  core.skills.named: [survival]
+items:
+  remove: ["Shield Bash"]
+  update:
+    - match: Hold the Line
+      set: { trigger: "…", description: "…" }
+    - match: Longsword
+      set: { proficiency: master, runes: { potency: 2 } }
+  replace:
+    - match: Knockdown Crash
+      with: { origin: homebrew, type: action, name: Knockdown Crash, actionType: 2 }
+  add:
+    - { origin: compendiumRef, refType: action, lookup: { name: Grab } }
+```
+
+**Target**: the sheet you open the dialog from is always the actor that gets patched. `target` is optional. If you include it (`name` or `uuid`), the patch refuses to apply to any other sheet.
+
+**`set` paths**: `meta.name`, `meta.level`, `meta.source`, `core.rarity`, `core.size`, `core.ac`, `core.hp.value`, `core.hp.notes`, `core.perception.mod`, `core.speed.value`, `core.saves.*`, `core.abilities.*`, `core.skills.named` and `core.skills.named.<skill>`. Every list path below can also be `set`. If an NPC is at full HP and its max HP changes, its current HP moves with it.
+
+**List paths for `add`/`remove`**: `add` replaces any entry that has the same key. `remove` takes key strings.
+
+| path | key |
+|---|---|
+| `core.traits`, `core.languages` | slug |
+| `core.perception.senses` | sense type |
+| `core.speed.other`, `core.resistances`, `core.weaknesses`, `core.immunities` | `type` |
+| `core.skills.lore` | name, with or without "Lore" |
+| `core.skills.named` (remove only) | skill slug |
+
+When `add` rewrites an IWR list, entries you didn't name keep any extra fields, like `doubleVs`.
+
+**Items** are matched by name (case-insensitive). `remove` and `replace` hit every item with that name, so `remove: [Longsword]` removes both the weapon and its strike. `update.set` accepts:
+
+- any item: `name`, `description`, `traits`
+- actions: `actionType`, `category`, `trigger` (needs `description` in the same `set`)
+- strikes: `attackBonus`, `damageRolls`, `attackEffects`
+- weapon strikes: `proficiency`, `runes`, `abilityOverride`, `damageAbilityOverride`
+
+Weapon strikes carry `flags.npc-sheet-importer.strike`. When a patch changes the level or an attribute, those strikes are recalculated with the PC-style math. Homebrew and hand-made strikes keep their numbers, and you get a warning. Strikes imported before this feature don't have the flag, so re-import the actor to get recalculation.
+
+The preview lists every change before anything is written. If applying a patch fails partway, the actor is restored from a snapshot.
 
 ## Batch behaviour
 

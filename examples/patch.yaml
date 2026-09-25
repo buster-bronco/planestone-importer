@@ -1,0 +1,37 @@
+# levels the border warden from actor.yaml up to 5 and swaps some abilities
+# apply from the warden's sheet: header → Patch
+schemaVersion: 1
+kind: actorPatch
+target: { name: Border Warden }   # optional; refuses to apply to a different sheet
+
+set:
+  meta.level: 5
+  core.ac: 23
+  core.hp.value: 75
+  core:
+    saves: { fortitude: 14, will: 13 }
+    abilities.str: 5
+  core.skills.named.stealth: 10
+
+add:
+  core.resistances: [{ type: cold, value: 5 }]
+  core.perception.senses: ["darkvision"]
+  core.skills.lore: [{ name: Sailing, mod: 7 }]
+
+remove:
+  core.resistances: [fire]
+  core.skills.named: [survival]
+
+items:
+  remove: ["Shield Bash"]
+  update:
+    - match: Hold the Line
+      set:
+        trigger: "An ally within 15 feet is hit by a melee attack."
+        description: "The warden steps in; the ally gains resistance 5 to the triggering damage and the attacker is [[off-guard]]."
+    - match: Longsword
+      set: { proficiency: master, runes: { potency: 2 } }
+  add:
+    - origin: compendiumRef
+      refType: action
+      lookup: { name: Grab }

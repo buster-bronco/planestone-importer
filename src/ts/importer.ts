@@ -1,17 +1,13 @@
 import CONSTANTS from "./constants";
 import { buildActorSystem, type Vocabulary } from "./build/actorData";
-import { buildHomebrewAction, buildHomebrewStrike } from "./build/homebrew";
-import { computeStrike, dieFromDamage } from "./build/strikeMath";
-import { applyLinkMarks, type LinkTarget } from "./linkMarks";
-import { normalizePackId, PackIndex } from "./packIndex";
+import { addWeaponStrike, resolveItem, type PreparedWeapon } from "./items";
+import type { LinkTarget } from "./linkMarks";
+import { PackIndex } from "./packIndex";
 import { parseSheetText } from "./parse";
-import { isHomebrewStrike, type ActorDoc, type EquippedWeaponItem } from "./schema";
+import type { ActorDoc } from "./schema";
 import { getGame } from "./utils";
 
-export interface PreparedWeapon {
-  item: EquippedWeaponItem;
-  source: any;
-}
+export type { PreparedWeapon } from "./items";
 
 export interface PreparedActor {
   doc: ActorDoc;
@@ -35,7 +31,7 @@ export interface ImportResult {
   error?: string;
 }
 
-function vocabulary(): Vocabulary {
+export function vocabulary(): Vocabulary {
   const pf2e = CONFIG.PF2E ?? {};
   const keys = (record: unknown) => (record && typeof record === "object" ? new Set(Object.keys(record)) : undefined);
   return {
@@ -46,21 +42,6 @@ function vocabulary(): Vocabulary {
   };
 }
 
-// compendium document → embeddable data with compendiumSource set
-async function compendiumItemData(uuid: string): Promise<any> {
-  const document = await fromUuid(uuid);
-  if (!document) throw new Error(`compendium item ${uuid} not found`);
-  return getGame().items.fromCompendium(document);
-}
-
-function linkDescription(itemData: any, targets: Map<string, LinkTarget>, warn: (message: string) => void): void {
-  const description = itemData.system?.description;
-  if (!description?.value) return;
-  const { html, unresolved } = applyLinkMarks(description.value, (name) => targets.get(name) ?? null);
-  description.value = html;
-  for (const term of unresolved) warn(`"${itemData.name}": no condition or action named "${term}", left as plain text`);
-}
-
 async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string, LinkTarget>, vocab: Vocabulary): Promise<PreparedActor> {
   const { system, loreItems, warnings } = buildActorSystem(doc, vocab);
   const prepared: PreparedActor = { doc, system, items: [...loreItems], weapons: [], warnings, errors: [] };
@@ -69,36 +50,10 @@ async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string
   const fail = (message: string) => prepared.errors.push(`${name}: ${message}`);
 
   for (const item of doc.items) {
-    if (item.origin === "homebrew") {
-      const data = isHomebrewStrike(item) ? buildHomebrewStrike(item, warn) : buildHomebrewAction(item);
-      linkDescription(data, targets, warn);
-      prepared.items.push(data);
-      continue;
-    }
-
-    const isWeapon = item.origin === "equippedWeapon";
-    const refType = isWeapon ? "equipment" : item.refType;
-    if (refType === "spell") {
-      warn(`spell "${item.lookup.name}" skipped; spells need a spellcasting entry`);
-      continue;
-    }
-
-    const packs = item.lookup.pack ? [normalizePackId(item.lookup.pack)] : CONSTANTS.PACKS_BY_REF_TYPE[refType];
-    if (item.lookup.pack && !game.packs.get(packs[0])) {
-      fail(`pack "${item.lookup.pack}" not found for "${item.lookup.name}"`);
-      continue;
-    }
-
-    const hit = await index.find(packs, item.lookup.name, isWeapon ? ["weapon"] : refType === "action" ? ["action"] : undefined);
-    if (!hit) {
-      fail(`no ${isWeapon ? "weapon" : refType} named "${item.lookup.name}" in ${packs.join(", ")}`);
-      continue;
-    }
-    if (hit.alternatives.length) warn(`"${item.lookup.name}" matched ${hit.alternatives.length + 1} items; using ${hit.uuid}`);
-
-    const data = await compendiumItemData(hit.uuid);
-    if (isWeapon) prepared.weapons.push({ item, source: data });
-    else prepared.items.push(data);
+    const resolved = await resolveItem(item, { index, targets, warn, fail });
+    if (!resolved) continue;
+    if ("weapon" in resolved) prepared.weapons.push(resolved.weapon);
+    else prepared.items.push(resolved.data);
   }
 
   return prepared;
@@ -108,6 +63,7 @@ async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string
 export async function prepareImport(text: string): Promise<ImportPlan> {
   const parsed = parseSheetText(text);
   const plan: ImportPlan = { actors: [], errors: [...parsed.errors], warnings: [...parsed.warnings] };
+  if (parsed.patches.length) plan.errors.push("patches are applied from an npc sheet's Patch button");
   if (plan.errors.length) return plan;
 
   const index = new PackIndex();
@@ -120,39 +76,6 @@ export async function prepareImport(text: string): Promise<ImportPlan> {
     plan.warnings.push(...prepared.warnings);
   }
   return plan;
-}
-
-// weapon → pf2e's generated npc attack, with pc-style numbers swapped in
-async function addWeaponStrike(actor: any, prepared: PreparedActor, weapon: PreparedWeapon): Promise<void> {
-  const { item } = weapon;
-  const source = foundry.utils.deepClone(weapon.source);
-  foundry.utils.setProperty(source, "system.runes.potency", item.runes.potency);
-  foundry.utils.setProperty(source, "system.runes.striking", item.runes.striking);
-
-  const [created] = await actor.createEmbeddedDocuments("Item", [source]);
-  const attacks = created.toNPCAttacks().map((attack: any) => {
-    const data = attack.toObject();
-    const rolls: any[] = Object.values(data.system.damageRolls);
-    const base = rolls.find((roll) => !roll.category) ?? rolls[0];
-    const die = dieFromDamage(base?.damage ?? "") ?? created.system.damage.die;
-    const result = computeStrike({
-      level: prepared.doc.meta.level,
-      proficiency: item.proficiency,
-      abilities: prepared.doc.core.abilities,
-      potency: item.runes.potency,
-      striking: item.runes.striking,
-      traits: data.system.traits.value,
-      die,
-      abilityOverride: item.abilityOverride,
-      damageAbilityOverride: item.damageAbilityOverride,
-    });
-    data.system.bonus.value = result.attackBonus;
-    if (base) base.damage = result.damage;
-    return data;
-  });
-
-  await actor.createEmbeddedDocuments("Item", attacks);
-  if (!item.keepInInventory) await created.delete();
 }
 
 export interface ImportOptions {
@@ -204,7 +127,8 @@ export async function executeImport(plan: ImportPlan, options: ImportOptions = {
         items: prepared.items,
         flags: { [CONSTANTS.MODULE_ID]: { schemaVersion: 1, source: meta.source ?? null, freeArchetype: meta.freeArchetype } },
       });
-      for (const weapon of prepared.weapons) await addWeaponStrike(actor, prepared, weapon);
+      const stats = { level: meta.level, abilities: prepared.doc.core.abilities };
+      for (const weapon of prepared.weapons) await addWeaponStrike(actor, weapon, stats);
       results.push({ name: meta.name, ok: true, actorUuid: actor.uuid });
     } catch (err) {
       console.error(CONSTANTS.DEBUG_PREFIX, err);

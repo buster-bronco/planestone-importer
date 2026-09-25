@@ -18,6 +18,23 @@ export interface StrikeInput {
   damageAbilityOverride?: AbilityKey | null;
 }
 
+// actor-wide numbers a strike depends on
+export interface StrikeStats {
+  level: number;
+  abilities: Record<AbilityKey, number>;
+}
+
+// stored on generated strikes as flags.npc-sheet-importer.strike, for later recalcs
+export interface StrikeFlag {
+  weapon: string;
+  proficiency: Proficiency;
+  potency: number;
+  striking: number;
+  die: string;
+  abilityOverride: AbilityKey | null;
+  damageAbilityOverride: AbilityKey | null;
+}
+
 export interface StrikeResult {
   attackBonus: number;
   damage: string;

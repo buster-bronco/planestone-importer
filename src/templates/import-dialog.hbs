@@ -7,7 +7,12 @@
         <span>{{#if busy}}{{localize "npc-sheet-importer.dialog.reading"}}{{else}}{{localize "npc-sheet-importer.dialog.choose"}}{{/if}}</span>
         <input type="file" accept=".yaml,.yml,.json" {{#if busy}}disabled{{/if}}>
       </label>
+      <p class="or">{{localize "npc-sheet-importer.dialog.orPaste"}}</p>
+      <textarea name="sheetText" class="paste" spellcheck="false" placeholder="schemaVersion: 1&#10;kind: actor&#10;meta: { name: …, level: 1 }" {{#if busy}}disabled{{/if}}>{{pasted}}</textarea>
     </div>
+    <footer class="buttons">
+      <button type="button" data-action="loadText" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-paste"></i> {{localize "npc-sheet-importer.dialog.loadText"}}</button>
+    </footer>
   {{/if}}
 
   {{#if isPreview}}

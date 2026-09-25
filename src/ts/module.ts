@@ -1,7 +1,10 @@
 import "../styles/style.scss";
 import CONSTANTS from "./constants";
 import ImportDialog from "./apps/ImportDialog";
-import { executeImport, prepareImport, type ImportOptions } from "./importer";
+import PatchDialog from "./apps/PatchDialog";
+import { executeImport, prepareImport, vocabulary, type ImportOptions } from "./importer";
+import { executePatch } from "./patch/apply";
+import { preparePatchText } from "./patch/prepare";
 import { getGame, isCurrentUserGM, localize } from "./utils";
 
 function openDialog() {
@@ -15,8 +18,23 @@ async function importText(text: string, options: ImportOptions = {}) {
   return { plan, results: await executeImport(plan, options) };
 }
 
+// one dialog per actor; a second click brings the open one forward
+function openPatchDialog(actor: any) {
+  const open = foundry.applications.instances?.get(`${CONSTANTS.MODULE_ID}-patch-${actor.id}`);
+  return (open ?? new PatchDialog(actor)).render({ force: true });
+}
+
+// patch text → one npc, for macros; actor is a document or uuid
+async function applyPatch(actorOrUuid: any, text: string) {
+  const actor = typeof actorOrUuid === "string" ? await fromUuid(actorOrUuid) : actorOrUuid;
+  if (actor?.type !== "npc") throw new Error("applyPatch needs an npc actor");
+  const plan = await preparePatchText(actor, text, vocabulary());
+  if (plan.errors.length || !plan.patch) return { plan, result: null };
+  return { plan, result: await executePatch(plan.patch) };
+}
+
 Hooks.once("init", () => {
-  getGame().modules.get(CONSTANTS.MODULE_ID).api = { openDialog, prepareImport, executeImport, importText };
+  getGame().modules.get(CONSTANTS.MODULE_ID).api = { openDialog, prepareImport, executeImport, importText, openPatchDialog, applyPatch };
 });
 
 // adds the import button to the actors sidebar header
@@ -32,4 +50,16 @@ Hooks.on("renderActorDirectory", (_app: unknown, html: HTMLElement) => {
   button.innerHTML = `<i class="fa-solid fa-file-import"></i> ${localize("sidebar.button")}`;
   button.addEventListener("click", () => openDialog());
   actions.append(button);
+});
+
+// adds a patch button to world npc sheet headers (pf2e sheets are appv1)
+Hooks.on("getActorSheetHeaderButtons", (sheet: any, buttons: any[]) => {
+  const actor = sheet.actor;
+  if (!isCurrentUserGM() || actor?.type !== "npc" || actor.pack) return;
+  buttons.unshift({
+    label: localize("sheet.patch"),
+    class: `${CONSTANTS.MODULE_ID}-patch`,
+    icon: "fa-solid fa-file-pen",
+    onclick: () => openPatchDialog(actor),
+  });
 });

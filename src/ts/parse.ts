@@ -1,6 +1,7 @@
 import yaml from "js-yaml";
 import type { ZodIssue } from "zod";
-import { isHomebrewAction, isHomebrewStrike, sheetFile, type ActorDoc, type SpellListDoc } from "./schema";
+import { normalizeOps } from "./patch/paths";
+import { isHomebrewAction, isHomebrewStrike, sheetFile, type ActorDoc, type ActorPatchDoc, type SpellListDoc } from "./schema";
 import { sluggify } from "./slug";
 
 // attack effects pf2e knows without a matching action item (CONFIG.PF2E.attackEffects)
@@ -18,6 +19,7 @@ export const BUILTIN_ATTACK_EFFECTS = new Set([
 
 export interface ParsedSheet {
   actors: ActorDoc[];
+  patches: ActorPatchDoc[];
   spellLists: SpellListDoc[];
   errors: string[];
   warnings: string[];
@@ -30,7 +32,7 @@ function formatIssue(issue: ZodIssue): string {
 
 // yaml is a superset of json, so one loader covers both
 export function parseSheetText(text: string): ParsedSheet {
-  const result: ParsedSheet = { actors: [], spellLists: [], errors: [], warnings: [] };
+  const result: ParsedSheet = { actors: [], patches: [], spellLists: [], errors: [], warnings: [] };
 
   let raw: unknown;
   try {
@@ -49,6 +51,7 @@ export function parseSheetText(text: string): ParsedSheet {
   const doc = parsed.data;
   if (doc.kind === "actor") result.actors.push(doc);
   else if (doc.kind === "spellList") result.spellLists.push(doc);
+  else if (doc.kind === "actorPatch") result.patches.push(doc);
   else {
     result.actors.push(...doc.actors);
     result.spellLists.push(...doc.spellLists);
@@ -59,7 +62,25 @@ export function parseSheetText(text: string): ParsedSheet {
   }
 
   for (const actor of result.actors) checkActor(actor, result);
+  for (const patch of result.patches) checkPatch(patch, result);
   return result;
+}
+
+export function patchLabel(patch: ActorPatchDoc): string {
+  return patch.target?.name ?? patch.target?.uuid ?? "patch";
+}
+
+// path and value checks that don't need the target actor
+function checkPatch(patch: ActorPatchDoc, result: ParsedSheet): void {
+  const label = patchLabel(patch);
+  for (const error of normalizeOps(patch).errors) result.errors.push(`patch ${label}: ${error}`);
+}
+
+// ok: an action on the actor; builtin: pf2e knows it without one; unknown: neither
+export function classifyAttackEffect(effect: string, actionSlugs: Set<string>): "ok" | "builtin" | "unknown" {
+  const slug = sluggify(effect);
+  if (actionSlugs.has(slug)) return "ok";
+  return BUILTIN_ATTACK_EFFECTS.has(slug) ? "builtin" : "unknown";
 }
 
 // cross-field rules zod can't express per object
@@ -75,11 +96,10 @@ function checkActor(actor: ActorDoc, result: ParsedSheet): void {
   actor.items.forEach((item, index) => {
     if (!isHomebrewStrike(item)) return;
     for (const effect of item.attackEffects) {
-      const slug = sluggify(effect);
-      if (actionSlugs.has(slug)) continue;
-      if (BUILTIN_ATTACK_EFFECTS.has(slug)) {
-        result.warnings.push(`${name}: "${item.name}" attack effect "${slug}" has no matching action; the roll card will show the label only`);
-      } else {
+      const kind = classifyAttackEffect(effect, actionSlugs);
+      if (kind === "builtin") {
+        result.warnings.push(`${name}: "${item.name}" attack effect "${sluggify(effect)}" has no matching action; the roll card will show the label only`);
+      } else if (kind === "unknown") {
         result.errors.push(`${name}: items.${index}.attackEffects: "${effect}" doesn't match any action item on this actor`);
       }
     }
