@@ -165,7 +165,7 @@ export interface FolderOption {
   label: string;
 }
 
-// actor folders in tree order, nested names indented
+// actor folders in tree order, one dash per nesting level
 export function actorFolderOptions(): FolderOption[] {
   const byParent = new Map<string | null, any[]>();
   for (const folder of getGame().folders.filter((f: any) => f.type === "Actor")) {
@@ -177,7 +177,7 @@ export function actorFolderOptions(): FolderOption[] {
   const walk = (parent: string | null, depth: number) => {
     const children = (byParent.get(parent) ?? []).sort((a, b) => a.name.localeCompare(b.name));
     for (const folder of children) {
-      options.push({ id: folder.id, label: `${"   ".repeat(depth)}${folder.name}` });
+      options.push({ id: folder.id, label: depth ? `${"-".repeat(depth)} ${folder.name}` : folder.name });
       walk(folder.id, depth + 1);
     }
   };

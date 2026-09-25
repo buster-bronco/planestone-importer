@@ -30,6 +30,8 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
   private busy = false;
   // empty string is the actors root
   private folderId = "";
+  // folder document hooks, registered while the dialog is open
+  private folderHooks: [string, number][] = [];
 
   async _prepareContext() {
     const plan = this.plan;
@@ -70,6 +72,32 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     });
     const folderSelect = this.element.querySelector("select[name=folder]") as HTMLSelectElement | null;
     folderSelect?.addEventListener("change", () => (this.folderId = folderSelect.value));
+  }
+
+  async _onFirstRender(context: unknown, options: unknown) {
+    await super._onFirstRender(context, options);
+    const refresh = (folder: any) => {
+      if (folder.type === "Actor") this.refreshFolderSelect();
+    };
+    this.folderHooks = ["createFolder", "updateFolder", "deleteFolder"].map((hook) => [hook, Hooks.on(hook, refresh)]);
+  }
+
+  _onClose(options: unknown) {
+    super._onClose(options);
+    for (const [hook, id] of this.folderHooks) Hooks.off(hook, id);
+    this.folderHooks = [];
+  }
+
+  // rebuilds the dropdown in place; a deleted selection falls back to root
+  private refreshFolderSelect() {
+    const folders = actorFolderOptions();
+    if (this.folderId && !folders.some((folder) => folder.id === this.folderId)) this.folderId = "";
+
+    const select = this.element?.querySelector("select[name=folder]") as HTMLSelectElement | null;
+    if (!select) return;
+    const root = select.options[0];
+    select.replaceChildren(root, ...folders.map((folder) => new Option(folder.label, folder.id)));
+    select.value = this.folderId;
   }
 
   private async loadFile(file: File) {
