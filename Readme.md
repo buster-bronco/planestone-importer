@@ -1,4 +1,4 @@
-# NPC Sheet Importer
+# Planestone Importer
 
 A Foundry VTT module that imports **Planestone sheet** files (YAML or JSON) as pf2e NPC actors. Built for my own game.
 
@@ -19,7 +19,7 @@ npm run build      # production build into dist/
 `npm run dev` copies to the path in `.env`:
 
 ```
-FOUNDRY_VTT_PATH="C:/Users/tripl/AppData/Local/FoundryVTT/Data/modules/npc-sheet-importer"
+FOUNDRY_VTT_PATH="C:/Users/tripl/AppData/Local/FoundryVTT/Data/modules/planestone-importer"
 ```
 
 Use forward slashes: dotenv turns `\n` in a double-quoted value into a newline.
@@ -33,12 +33,12 @@ Releases work like emotive-hud: publishing a GitHub release runs `.github/workfl
 3. Check the preview (actors, item counts, warnings), pick a destination folder (defaults to the Actors root) → **Import**.
 4. To change an existing NPC later, use **Patch** in its sheet header (see [Patches](#patches-actorpatch)).
 
-Each imported actor is flagged with `flags.npc-sheet-importer.{schemaVersion, source, freeArchetype}`.
+Each imported actor is flagged with `flags.planestone-importer.{schemaVersion, source, freeArchetype}`.
 
 Macro API:
 
 ```js
-const api = game.modules.get("npc-sheet-importer").api;
+const api = game.modules.get("planestone-importer").api;
 api.openDialog();
 const { plan, results } = await api.importText(yamlString, { folderId: null }); // folderId optional, null = root
 api.openPatchDialog(actor);
@@ -225,7 +225,7 @@ When `add` rewrites an IWR list, entries you didn't name keep any extra fields, 
 - strikes: `attackBonus`, `damageRolls`, `attackEffects`
 - weapon strikes: `proficiency`, `runes`, `abilityOverride`, `damageAbilityOverride`
 
-Weapon strikes carry `flags.npc-sheet-importer.strike`. When a patch changes the level or an attribute, those strikes are recalculated with the PC-style math. Homebrew and hand-made strikes keep their numbers, and you get a warning. Strikes imported before this feature don't have the flag, so re-import the actor to get recalculation.
+Weapon strikes carry `flags.planestone-importer.strike`. When a patch changes the level or an attribute, those strikes are recalculated with the PC-style math. Homebrew and hand-made strikes keep their numbers, and you get a warning. Strikes imported before this feature don't have the flag, so re-import the actor to get recalculation.
 
 The preview lists every change before anything is written. If applying a patch fails partway, the actor is restored from a snapshot.
 

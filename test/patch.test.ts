@@ -11,7 +11,7 @@ const example = (name: string) => readFileSync(new URL(`../examples/${name}`, im
 const [warden] = parseSheetText(example("actor.yaml")).actors;
 
 const strikeFlag = (weapon: string, extra: object) => ({
-  "npc-sheet-importer": { strike: { weapon, abilityOverride: null, damageAbilityOverride: null, ...extra } },
+  "planestone-importer": { strike: { weapon, abilityOverride: null, damageAbilityOverride: null, ...extra } },
 });
 
 // what actor.toObject() looks like for actor.yaml after import
@@ -260,7 +260,7 @@ items:
     const byId = Object.fromEntries(changes.updateItems.map((u: any) => [u._id, u]));
     expect(byId.wpn1).toEqual({ _id: "wpn1", "system.runes.potency": 2 });
     expect(byId.stk1["system.bonus.value"]).toBe(4 + 6 + 4 + 2);
-    expect(byId.stk1["flags.npc-sheet-importer.strike"]).toMatchObject({ proficiency: "master", potency: 2, striking: 1 });
+    expect(byId.stk1["flags.planestone-importer.strike"]).toMatchObject({ proficiency: "master", potency: 2, striking: 1 });
     expect(byId.stk2).toBeUndefined();
   });
 

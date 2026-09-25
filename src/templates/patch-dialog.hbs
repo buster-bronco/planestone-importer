@@ -1,15 +1,15 @@
 <section class="npc-importer">
   {{#if isEdit}}
     <div class="body">
-      <p class="hint">{{localize "npc-sheet-importer.patch.hint"}}</p>
+      <p class="hint">{{localize "planestone-importer.patch.hint"}}</p>
       <textarea name="patchText" class="paste" spellcheck="false" placeholder="schemaVersion: 1&#10;kind: actorPatch&#10;set:&#10;  core.ac: 23" {{#if busy}}disabled{{/if}}>{{text}}</textarea>
     </div>
     <footer class="buttons">
       <label class="button file-button">
-        <i class="fa-solid fa-file-arrow-up"></i> {{localize "npc-sheet-importer.patch.fromFile"}}
+        <i class="fa-solid fa-file-arrow-up"></i> {{localize "planestone-importer.patch.fromFile"}}
         <input type="file" accept=".yaml,.yml,.json" {{#if busy}}disabled{{/if}}>
       </label>
-      <button type="button" data-action="preview" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-eye"></i> {{#if busy}}{{localize "npc-sheet-importer.dialog.reading"}}{{else}}{{localize "npc-sheet-importer.patch.preview"}}{{/if}}</button>
+      <button type="button" data-action="preview" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-eye"></i> {{#if busy}}{{localize "planestone-importer.dialog.reading"}}{{else}}{{localize "planestone-importer.patch.preview"}}{{/if}}</button>
     </footer>
   {{/if}}
 
@@ -17,28 +17,28 @@
     <div class="body">
       {{#if errors.length}}
         <div class="messages errors">
-          <h4>{{localize "npc-sheet-importer.patch.errors"}}</h4>
+          <h4>{{localize "planestone-importer.patch.errors"}}</h4>
           <ul>{{#each errors}}<li>{{this}}</li>{{/each}}</ul>
         </div>
       {{/if}}
 
       {{#if changes.length}}
         <div class="patches">
-          <h4>{{localize "npc-sheet-importer.patch.changes"}}</h4>
+          <h4>{{localize "planestone-importer.patch.changes"}}</h4>
           <ul>{{#each changes}}<li>{{this}}</li>{{/each}}</ul>
         </div>
       {{/if}}
 
       {{#if warnings.length}}
         <div class="messages warnings">
-          <h4>{{localize "npc-sheet-importer.dialog.warnings"}}</h4>
+          <h4>{{localize "planestone-importer.dialog.warnings"}}</h4>
           <ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul>
         </div>
       {{/if}}
     </div>
     <footer class="buttons">
-      <button type="button" data-action="back"><i class="fa-solid fa-rotate-left"></i> {{localize "npc-sheet-importer.dialog.back"}}</button>
-      <button type="button" data-action="apply" {{#unless canApply}}disabled{{/unless}}><i class="fa-solid fa-file-pen"></i> {{#if busy}}{{localize "npc-sheet-importer.patch.applying"}}{{else}}{{localize "npc-sheet-importer.patch.apply"}}{{/if}}</button>
+      <button type="button" data-action="back"><i class="fa-solid fa-rotate-left"></i> {{localize "planestone-importer.dialog.back"}}</button>
+      <button type="button" data-action="apply" {{#unless canApply}}disabled{{/unless}}><i class="fa-solid fa-file-pen"></i> {{#if busy}}{{localize "planestone-importer.patch.applying"}}{{else}}{{localize "planestone-importer.patch.apply"}}{{/if}}</button>
     </footer>
   {{/if}}
 
@@ -46,12 +46,12 @@
     <div class="body">
       <ul class="results">
         <li class="{{#if result.ok}}ok{{else}}failed{{/if}}">
-          {{#if result.ok}}<i class="fa-solid fa-check"></i> {{localize "npc-sheet-importer.patch.applied"}}{{else}}<i class="fa-solid fa-xmark"></i> {{result.error}}{{/if}}
+          {{#if result.ok}}<i class="fa-solid fa-check"></i> {{localize "planestone-importer.patch.applied"}}{{else}}<i class="fa-solid fa-xmark"></i> {{result.error}}{{/if}}
         </li>
       </ul>
     </div>
     <footer class="buttons">
-      <button type="button" data-action="back"><i class="fa-solid fa-file-pen"></i> {{localize "npc-sheet-importer.patch.another"}}</button>
+      <button type="button" data-action="back"><i class="fa-solid fa-file-pen"></i> {{localize "planestone-importer.patch.another"}}</button>
     </footer>
   {{/if}}
 </section>

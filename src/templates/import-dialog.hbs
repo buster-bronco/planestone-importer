@@ -1,17 +1,17 @@
 <section class="npc-importer">
   {{#if isPick}}
     <div class="body">
-      <p class="hint">{{localize "npc-sheet-importer.dialog.hint"}}</p>
+      <p class="hint">{{localize "planestone-importer.dialog.hint"}}</p>
       <label class="file-pick">
         <i class="fa-solid fa-file-arrow-up"></i>
-        <span>{{#if busy}}{{localize "npc-sheet-importer.dialog.reading"}}{{else}}{{localize "npc-sheet-importer.dialog.choose"}}{{/if}}</span>
+        <span>{{#if busy}}{{localize "planestone-importer.dialog.reading"}}{{else}}{{localize "planestone-importer.dialog.choose"}}{{/if}}</span>
         <input type="file" accept=".yaml,.yml,.json" {{#if busy}}disabled{{/if}}>
       </label>
-      <p class="or">{{localize "npc-sheet-importer.dialog.orPaste"}}</p>
+      <p class="or">{{localize "planestone-importer.dialog.orPaste"}}</p>
       <textarea name="sheetText" class="paste" spellcheck="false" placeholder="schemaVersion: 1&#10;kind: actor&#10;meta: { name: …, level: 1 }" {{#if busy}}disabled{{/if}}>{{pasted}}</textarea>
     </div>
     <footer class="buttons">
-      <button type="button" data-action="loadText" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-paste"></i> {{localize "npc-sheet-importer.dialog.loadText"}}</button>
+      <button type="button" data-action="loadText" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-paste"></i> {{localize "planestone-importer.dialog.loadText"}}</button>
     </footer>
   {{/if}}
 
@@ -21,17 +21,17 @@
 
       {{#if errors.length}}
         <div class="messages errors">
-          <h4>{{localize "npc-sheet-importer.dialog.errors"}}</h4>
+          <h4>{{localize "planestone-importer.dialog.errors"}}</h4>
           <ul>{{#each errors}}<li>{{this}}</li>{{/each}}</ul>
         </div>
       {{/if}}
 
       {{#if actors.length}}
         <table class="actors">
-          <thead><tr><th>{{localize "npc-sheet-importer.dialog.name"}}</th><th>{{localize "npc-sheet-importer.dialog.level"}}</th><th>{{localize "npc-sheet-importer.dialog.items"}}</th></tr></thead>
+          <thead><tr><th>{{localize "planestone-importer.dialog.name"}}</th><th>{{localize "planestone-importer.dialog.level"}}</th><th>{{localize "planestone-importer.dialog.items"}}</th></tr></thead>
           <tbody>
             {{#each actors}}
-              <tr><td>{{name}}</td><td>{{level}}</td><td>{{itemCount}}{{#if weaponCount}} ({{weaponCount}} {{localize "npc-sheet-importer.dialog.weapons"}}){{/if}}</td></tr>
+              <tr><td>{{name}}</td><td>{{level}}</td><td>{{itemCount}}{{#if weaponCount}} ({{weaponCount}} {{localize "planestone-importer.dialog.weapons"}}){{/if}}</td></tr>
             {{/each}}
           </tbody>
         </table>
@@ -39,23 +39,23 @@
 
       {{#if warnings.length}}
         <div class="messages warnings">
-          <h4>{{localize "npc-sheet-importer.dialog.warnings"}}</h4>
+          <h4>{{localize "planestone-importer.dialog.warnings"}}</h4>
           <ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul>
         </div>
       {{/if}}
     </div>
 
     <div class="form-group folder-pick">
-      <label for="npc-sheet-importer-folder">{{localize "npc-sheet-importer.dialog.folder"}}</label>
-      <select id="npc-sheet-importer-folder" name="folder">
-        <option value="">{{localize "npc-sheet-importer.dialog.rootFolder"}}</option>
+      <label for="planestone-importer-folder">{{localize "planestone-importer.dialog.folder"}}</label>
+      <select id="planestone-importer-folder" name="folder">
+        <option value="">{{localize "planestone-importer.dialog.rootFolder"}}</option>
         {{#each folders}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
       </select>
     </div>
 
     <footer class="buttons">
-      <button type="button" data-action="reset"><i class="fa-solid fa-rotate-left"></i> {{localize "npc-sheet-importer.dialog.back"}}</button>
-      <button type="button" data-action="import" {{#unless canImport}}disabled{{/unless}}><i class="fa-solid fa-file-import"></i> {{#if busy}}{{localize "npc-sheet-importer.dialog.importing"}}{{else}}{{localize "npc-sheet-importer.dialog.import"}}{{/if}}</button>
+      <button type="button" data-action="reset"><i class="fa-solid fa-rotate-left"></i> {{localize "planestone-importer.dialog.back"}}</button>
+      <button type="button" data-action="import" {{#unless canImport}}disabled{{/unless}}><i class="fa-solid fa-file-import"></i> {{#if busy}}{{localize "planestone-importer.dialog.importing"}}{{else}}{{localize "planestone-importer.dialog.import"}}{{/if}}</button>
     </footer>
   {{/if}}
 
@@ -70,7 +70,7 @@
       </ul>
     </div>
     <footer class="buttons">
-      <button type="button" data-action="reset"><i class="fa-solid fa-file-import"></i> {{localize "npc-sheet-importer.dialog.another"}}</button>
+      <button type="button" data-action="reset"><i class="fa-solid fa-file-import"></i> {{localize "planestone-importer.dialog.another"}}</button>
     </footer>
   {{/if}}
 </section>

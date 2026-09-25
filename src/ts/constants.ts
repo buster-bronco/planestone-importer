@@ -2,8 +2,8 @@ import { id } from "../module.json";
 
 export const CONSTANTS = {
   MODULE_ID: id,
-  MODULE_NAME: "NPC Sheet Importer",
-  DEBUG_PREFIX: "NPC-SHEET-IMPORTER:",
+  MODULE_NAME: "Planestone Importer",
+  DEBUG_PREFIX: "PLANESTONE-IMPORTER:",
   SUPPORTED_SCHEMA_VERSION: 1,
 
   // pack search order per refType, first hit wins

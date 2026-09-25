@@ -24,7 +24,7 @@ export interface StrikeStats {
   abilities: Record<AbilityKey, number>;
 }
 
-// stored on generated strikes as flags.npc-sheet-importer.strike, for later recalcs
+// stored on generated strikes as flags.planestone-importer.strike, for later recalcs
 export interface StrikeFlag {
   weapon: string;
   proficiency: Proficiency;
