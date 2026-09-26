@@ -4,8 +4,12 @@ import { applyInventory, buildHomebrewGear } from "./build/gearData";
 import { buildHomebrewSpell } from "./build/spellData";
 import { computeStrike, dieFromDamage, type StrikeFlag, type StrikeStats } from "./build/strikeMath";
 import { applyAutoRolls } from "./autoRolls";
+import { remasterName } from "./aliases";
+import { formatRanked, rank } from "./fuzzy";
+import { lintConditions } from "./lint";
 import { applyLinkMarks, type LinkTarget } from "./linkMarks";
-import { normalizePackId, type PackIndex } from "./packIndex";
+import { normalizePackId, type PackIndex, type RefType } from "./packIndex";
+import { accepter, type Review } from "./review";
 import { isHomebrewGear, isHomebrewSpell, isHomebrewStrike, type EquippedWeaponItem, type SheetItem, type SpellRef } from "./schema";
 import { getGame } from "./utils";
 
@@ -19,6 +23,10 @@ export interface ItemContext {
   targets: Map<string, LinkTarget>;
   warn: (message: string) => void;
   fail: (message: string) => void;
+  // fixes and suggestions for the plan; absent in pure builds
+  review?: Review;
+  // owner label for suggestions, e.g. the actor name
+  owner?: string;
 }
 
 export type ResolvedItem = { data: any } | { weapon: PreparedWeapon } | null;
@@ -30,16 +38,27 @@ async function compendiumItemData(uuid: string): Promise<any> {
   return getGame().items.fromCompendium(document);
 }
 
-export function linkHtml(html: string, itemName: string, targets: Map<string, LinkTarget>, warn: (message: string) => void): string {
-  const result = applyLinkMarks(html, (name) => targets.get(name) ?? null);
-  for (const term of result.unresolved) warn(`"${itemName}": no condition or action named "${term}", left as plain text`);
-  return applyAutoRolls(result.html);
+// " (did you mean stupefied?)" for a mark that didn't resolve
+function markHint(term: string, targets: Map<string, LinkTarget>): string {
+  const name = term.replace(/\s+\d+$/, "");
+  const legacy = remasterName(name);
+  const best = legacy && targets.has(legacy) ? legacy : rank(name, [...targets.values()], { limit: 1 })[0]?.name.toLowerCase();
+  return best ? ` (did you mean ${best}?)` : "";
 }
 
-function linkDescription(itemData: any, targets: Map<string, LinkTarget>, warn: (message: string) => void): void {
+// condition lint → [[term]] links → dice rolls; each automatic change is a rejectable fix
+export function linkHtml(html: string, where: string, targets: Map<string, LinkTarget>, warn: (message: string) => void, review?: Review): string {
+  const accept = accepter(review, where);
+  const linted = review?.lint ? lintConditions(html, targets, accept) : html;
+  const result = applyLinkMarks(linted, (name) => targets.get(name) ?? null);
+  for (const term of result.unresolved) warn(`"${where}": no condition or action named "${term}", left as plain text${markHint(term, targets)}`);
+  return applyAutoRolls(result.html, accept);
+}
+
+function linkDescription(itemData: any, ctx: ItemContext): void {
   const description = itemData.system?.description;
   if (!description?.value) return;
-  description.value = linkHtml(description.value, itemData.name, targets, warn);
+  description.value = linkHtml(description.value, itemData.name, ctx.targets, ctx.warn, ctx.review);
 }
 
 export function sheetItemName(item: SheetItem): string {
@@ -50,29 +69,46 @@ function homebrewData(item: Extract<SheetItem, { origin: "homebrew" }>, ctx: Ite
   if (isHomebrewGear(item)) {
     const gear = buildHomebrewGear(item);
     applyInventory(gear, item, ctx.warn);
-    linkDescription(gear, ctx.targets, ctx.warn);
+    linkDescription(gear, ctx);
     return gear;
   }
   const data = isHomebrewSpell(item) ? buildHomebrewSpell(item) : isHomebrewStrike(item) ? buildHomebrewStrike(item, ctx.warn) : buildHomebrewAction(item);
-  linkDescription(data, ctx.targets, ctx.warn);
+  linkDescription(data, ctx);
   return data;
 }
 
 // compendium lookup by name; a miss or a bad pack hint calls fail and returns null
-async function findCompendium(lookup: { name: string; pack?: string }, refType: "action" | "equipment" | "spell", label: string, ctx: ItemContext): Promise<string | null> {
+async function findCompendium(lookup: { name: string; pack?: string }, refType: RefType, label: string, ctx: ItemContext): Promise<string | null> {
   const packs = lookup.pack ? [normalizePackId(lookup.pack)] : CONSTANTS.PACKS_BY_REF_TYPE[refType];
   if (lookup.pack && !game.packs.get(packs[0])) {
     ctx.fail(`pack "${lookup.pack}" not found for "${lookup.name}"`);
     return null;
   }
 
-  const hit = await ctx.index.find(packs, lookup.name, label === "weapon" ? ["weapon"] : refType === "equipment" ? undefined : [refType]);
+  const types = label === "weapon" ? ["weapon"] : refType === "equipment" ? undefined : [refType];
+  let hit = await ctx.index.find(packs, lookup.name, types);
+  const legacy = hit ? null : remasterName(lookup.name);
+  if (legacy) {
+    hit = await ctx.index.find(packs, legacy, types);
+    if (hit) ctx.warn(`"${lookup.name}" is a legacy name; used ${legacy}`);
+  }
   if (!hit) {
-    ctx.fail(`no ${label} named "${lookup.name}" in ${packs.join(", ")}`);
+    ctx.fail(await missMessage(lookup.name, packs, types, refType, label, ctx));
     return null;
   }
   if (hit.alternatives.length) ctx.warn(`"${lookup.name}" matched ${hit.alternatives.length + 1} items; using ${hit.uuid}`);
   return hit.uuid;
+}
+
+// why a lookup missed: wrong refType, or the closest names
+async function missMessage(name: string, packs: readonly string[], types: string[] | undefined, refType: RefType, label: string, ctx: ItemContext): Promise<string> {
+  const base = `no ${label} named "${name}" in ${packs.join(", ")}`;
+  const other = await ctx.index.elsewhere(name, refType);
+  if (other) return `${base}; "${other.name}" is a ${other.refType}, use refType: ${other.refType}`;
+  const candidates = await ctx.index.suggest(packs, name, types);
+  if (!candidates.length) return base;
+  ctx.review?.suggestions.push({ where: ctx.owner ? `${ctx.owner}: ${name}` : name, name, refType, candidates });
+  return `${base}; did you mean ${formatRanked(candidates)}?`;
 }
 
 // sheet item → item data, or a weapon still waiting for its strike

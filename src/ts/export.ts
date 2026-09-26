@@ -16,7 +16,7 @@ export interface SheetExport {
 
 const SIZE_NAMES: Record<string, string> = { tiny: "tiny", sm: "small", med: "medium", lg: "large", huge: "huge", grg: "gargantuan" };
 
-const REFTYPE_BY_ITEM: Record<string, "action" | "equipment" | "spell"> = {
+const REFTYPE_BY_ITEM: Record<string, "action" | "equipment" | "spell" | "feat" | "effect"> = {
   action: "action",
   spell: "spell",
   weapon: "equipment",
@@ -27,6 +27,8 @@ const REFTYPE_BY_ITEM: Record<string, "action" | "equipment" | "spell"> = {
   treasure: "equipment",
   backpack: "equipment",
   ammo: "equipment",
+  feat: "feat",
+  effect: "effect",
 };
 
 // _stats.compendiumSource is v12+; flags.core.sourceId is the older spot

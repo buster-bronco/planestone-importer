@@ -16,6 +16,8 @@ export const CONSTANTS = {
     ],
     equipment: ["pf2e.equipment-srd"],
     spell: ["pf2e.spells-srd"],
+    feat: ["pf2e.feats-srd"],
+    effect: ["pf2e.spell-effects", "pf2e.equipment-effects", "pf2e.feat-effects", "pf2e.other-effects"],
   },
 
   // packs searched for [[term]] marks

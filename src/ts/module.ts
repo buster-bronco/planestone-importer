@@ -9,6 +9,7 @@ import { preparePatchText } from "./patch/prepare";
 import { splitReply } from "./ai/extract";
 import { patchSystemPrompt, sheetSystemPrompt } from "./ai/prompt";
 import { AiSession } from "./ai/session";
+import { repairErrors, type ReviewOptions } from "./review";
 import { aiSend, maskApiKey, registerSettings, worldContext } from "./settings";
 import { documentYaml, getGame, isCurrentUserGM, localize } from "./utils";
 
@@ -17,8 +18,8 @@ function openDialog() {
 }
 
 // text → created actors, for macros
-async function importText(text: string, options: ImportOptions = {}) {
-  const plan = await prepareImport(text);
+async function importText(text: string, options: ImportOptions & ReviewOptions = {}) {
+  const plan = await prepareImport(text, options);
   if (plan.errors.length) return { plan, results: [] };
   return { plan, results: await executeImport(plan, options) };
 }
@@ -54,14 +55,14 @@ async function promptPatch(documentOrUuid: any, request: string) {
   if (!isItem && document?.type !== "npc") throw new Error("promptPatch needs an npc actor or a world item");
   const prepare = (text: string) => (isItem ? prepareItemPatchText(document, text) : preparePatchText(document, text, vocabulary()));
   const system = patchSystemPrompt({ kind: isItem ? "itemPatch" : "actorPatch", sheet: documentYaml(document), context: await worldContext() });
-  const session = new AiSession(system, aiSend(), async (reply) => (await prepare(splitReply(reply).yaml)).errors);
+  const session = new AiSession(system, aiSend(), async (reply) => repairErrors(await prepare(splitReply(reply).yaml)));
   const { yaml, notes } = splitReply(await session.ask(request));
   return { plan: await prepare(yaml), text: yaml, notes };
 }
 
 // request → ai sheet, prepared but not imported
 async function promptSheet(request: string) {
-  const session = new AiSession(sheetSystemPrompt({ context: await worldContext() }), aiSend(), async (reply) => (await prepareImport(splitReply(reply).yaml)).errors);
+  const session = new AiSession(sheetSystemPrompt({ context: await worldContext() }), aiSend(), async (reply) => repairErrors(await prepareImport(splitReply(reply).yaml)));
   const { yaml, notes } = splitReply(await session.ask(request));
   return { plan: await prepareImport(yaml), text: yaml, notes };
 }

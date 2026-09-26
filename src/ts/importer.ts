@@ -6,10 +6,11 @@ import { buildVehicleSystem } from "./build/vehicleData";
 import { addWeaponStrike, linkHtml, resolveItem, resolveSpell, sheetItemName, type ItemContext, type PreparedWeapon } from "./items";
 import type { LinkTarget } from "./linkMarks";
 import { PackIndex } from "./packIndex";
+import { newReview, type Review, type ReviewOptions, type Suggestion, type TextFix } from "./review";
 import { parseSheetText } from "./parse";
 import { SPELL_RANK_KEYS, type ActorDoc, type HazardDoc, type SheetItem, type SpellcastingEntry, type VehicleDoc } from "./schema";
 import { randomID } from "./slug";
-import { getGame } from "./utils";
+import { conditionLintEnabled, getGame } from "./utils";
 
 export type { PreparedWeapon } from "./items";
 
@@ -44,6 +45,17 @@ export interface ImportPlan {
   items: PreparedWorldItem[];
   errors: string[];
   warnings: string[];
+  // automatic text changes, applied or rejected
+  fixes: TextFix[];
+  // compendium names that missed, with the closest matches
+  suggestions: Suggestion[];
+}
+
+// shared per prepare run
+interface Lookup {
+  index: PackIndex;
+  targets: Map<string, LinkTarget>;
+  review: Review;
 }
 
 export interface ImportResult {
@@ -72,7 +84,7 @@ export function vocabulary(): Vocabulary {
   };
 }
 
-async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string, LinkTarget>, vocab: Vocabulary): Promise<PreparedActor> {
+async function prepareActor(doc: ActorDoc, lookup: Lookup, vocab: Vocabulary): Promise<PreparedActor> {
   const { system, loreItems, warnings } = buildActorSystem(doc, vocab);
   const prepared: PreparedActor = { doc, system, items: [...loreItems], weapons: [], warnings };
   const name = doc.meta.name;
@@ -80,7 +92,7 @@ async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string
   const fail = skipItem(prepared.warnings, name);
 
   for (const item of doc.items) {
-    const resolved = await resolveItem(item, { index, targets, warn, fail });
+    const resolved = await resolveItem(item, { ...lookup, warn, fail, owner: name });
     if (!resolved) continue;
     if ("weapon" in resolved) prepared.weapons.push(resolved.weapon);
     else prepared.items.push(resolved.data);
@@ -88,7 +100,7 @@ async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string
 
   // parse.ts already swapped spell list ids for their entries
   const entries = doc.spellcasting.filter((entry): entry is SpellcastingEntry => typeof entry !== "string");
-  const spellCtx: ItemContext = { index, targets, warn, fail: skipItem(prepared.warnings, name, "spell") };
+  const spellCtx: ItemContext = { ...lookup, warn, fail: skipItem(prepared.warnings, name, "spell"), owner: name };
   for (const entry of entries) prepared.items.push(...(await prepareSpellcasting(entry, spellCtx)));
 
   const focus = focusPool(entries);
@@ -114,8 +126,7 @@ async function prepareSpellcasting(entry: SpellcastingEntry, ctx: ItemContext): 
 async function prepareSimpleActor<Doc extends VehicleDoc | HazardDoc>(
   doc: Doc,
   build: { system: Record<string, unknown>; warnings: string[] },
-  index: PackIndex,
-  targets: Map<string, LinkTarget>,
+  lookup: Lookup,
 ): Promise<PreparedSimpleActor<Doc>> {
   const prepared: PreparedSimpleActor<Doc> = { doc, system: build.system, items: [], warnings: build.warnings };
   const name = doc.meta.name;
@@ -124,7 +135,7 @@ async function prepareSimpleActor<Doc extends VehicleDoc | HazardDoc>(
 
   // parse.ts already rejects weapon strikes and spells here
   for (const item of doc.items) {
-    const resolved = await resolveItem(item, { index, targets, warn, fail });
+    const resolved = await resolveItem(item, { ...lookup, warn, fail, owner: name });
     if (resolved && "data" in resolved) prepared.items.push(resolved.data);
   }
 
@@ -132,38 +143,49 @@ async function prepareSimpleActor<Doc extends VehicleDoc | HazardDoc>(
 }
 
 // [[...]] marks in the hazard's own text fields, not just its items
-function linkHazardText(prepared: PreparedHazard, targets: Map<string, LinkTarget>): void {
+function linkHazardText(prepared: PreparedHazard, { targets, review }: Lookup): void {
   const name = prepared.doc.meta.name;
   const warn = (message: string) => prepared.warnings.push(`${name}: ${message}`);
   const system = prepared.system as any;
-  for (const field of HAZARD_HTML_FIELDS) system.details[field] = linkHtml(system.details[field], `${name} ${field}`, targets, warn);
-  system.attributes.stealth.details = linkHtml(system.attributes.stealth.details, `${name} stealth`, targets, warn);
+  for (const field of HAZARD_HTML_FIELDS) system.details[field] = linkHtml(system.details[field], `${name} ${field}`, targets, warn, review);
+  system.attributes.stealth.details = linkHtml(system.attributes.stealth.details, `${name} stealth`, targets, warn, review);
 }
 
 // parse, validate and resolve everything without touching the world
-export async function prepareImport(text: string): Promise<ImportPlan> {
+// options.lint defaults to the user's condition lint setting
+export async function prepareImport(text: string, options: ReviewOptions = {}): Promise<ImportPlan> {
   const parsed = parseSheetText(text);
-  const plan: ImportPlan = { actors: [], vehicles: [], hazards: [], items: [], errors: [...parsed.errors], warnings: [...parsed.warnings] };
+  const review = newReview({ lint: conditionLintEnabled(), ...options });
+  const plan: ImportPlan = {
+    actors: [],
+    vehicles: [],
+    hazards: [],
+    items: [],
+    errors: [...parsed.errors],
+    warnings: [...parsed.warnings],
+    fixes: review.fixes,
+    suggestions: review.suggestions,
+  };
   if (parsed.patches.length) plan.errors.push("patches are applied from an npc sheet's Patch button");
   if (parsed.itemPatches.length) plan.errors.push("item patches are applied from an item sheet's Patch button");
   if (plan.errors.length) return plan;
 
   const index = new PackIndex();
-  const targets = await index.linkTargets();
+  const lookup: Lookup = { index, targets: await index.linkTargets(), review };
   const vocab = vocabulary();
   for (const doc of parsed.actors) {
-    const prepared = await prepareActor(doc, index, targets, vocab);
+    const prepared = await prepareActor(doc, lookup, vocab);
     plan.actors.push(prepared);
     plan.warnings.push(...prepared.warnings);
   }
   for (const doc of parsed.vehicles) {
-    const prepared = await prepareSimpleActor(doc, buildVehicleSystem(doc, vocab), index, targets);
+    const prepared = await prepareSimpleActor(doc, buildVehicleSystem(doc, vocab), lookup);
     plan.vehicles.push(prepared);
     plan.warnings.push(...prepared.warnings);
   }
   for (const doc of parsed.hazards) {
-    const prepared = await prepareSimpleActor(doc, buildHazardSystem(doc, vocab), index, targets);
-    linkHazardText(prepared, targets);
+    const prepared = await prepareSimpleActor(doc, buildHazardSystem(doc, vocab), lookup);
+    linkHazardText(prepared, lookup);
     plan.hazards.push(prepared);
     plan.warnings.push(...prepared.warnings);
   }
@@ -171,7 +193,7 @@ export async function prepareImport(text: string): Promise<ImportPlan> {
     const name = sheetItemName(doc);
     const warn = (message: string) => plan.warnings.push(`${name}: ${message}`);
     const fail = skipItem(plan.warnings, name);
-    const resolved = await resolveItem(doc, { index, targets, warn, fail });
+    const resolved = await resolveItem(doc, { ...lookup, warn, fail });
     if (resolved && "data" in resolved) plan.items.push({ doc, data: resolved.data });
   }
   return plan;

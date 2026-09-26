@@ -112,6 +112,13 @@
       "refine": "Refine",
       "editYaml": "Edit YAML",
       "generated": "AI sheet"
+    },
+    "review": {
+      "lint": "Lint conditions",
+      "lintHint": "Link plain condition names and fix misspelled or legacy [[marks]]. Saved for your user.",
+      "fixes": "Automatic text fixes: untick to reject",
+      "suggestions": "Names not found: did you mean",
+      "pickFailed": "Couldn't find that name in the sheet text"
     }
   }
 }

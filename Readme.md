@@ -41,6 +41,7 @@ Macro API:
 const api = game.modules.get("planestone-importer").api;
 api.openDialog();
 const { plan, results } = await api.importText(yamlString, { folderId: null, itemFolderId: null }); // folders optional, null = root
+// every prepare also takes { lint, rejectFixes }; plan.fixes and plan.suggestions list what the translator changed or couldn't find
 api.openPatchDialog(actorOrItem);
 const { plan, result } = await api.applyPatch(actor, patchYaml); // actor document or uuid
 const { plan, result } = await api.applyItemPatch(item, itemPatchYaml); // world item document or uuid
@@ -163,17 +164,21 @@ Only `stealth.mod`, `meta.name` and `meta.level` are required. `[[...]]` link ma
 
 ```yaml
 - origin: compendiumRef
-  refType: action | equipment | spell
+  refType: action | equipment | spell | feat | effect
   lookup: { name: "Reactive Strike", pack: "actionspf2e" }   # pack optional
 ```
 
 Without a `pack` hint, the importer searches these packs in order and uses the first exact match (case-insensitive). If several items match, you get a warning. If nothing matches, or the `pack` hint names a pack that doesn't exist, that item is skipped with a warning and the rest of the sheet still imports.
+
+A miss says why: `no weapon named "Daggor" in pf2e.equipment-srd; did you mean Dagger (0.83)?`, or `"Shield Block" is a feat, use refType: feat` when the name exists under another `refType`. Pre-remaster names resolve to their remaster item with a warning (`Magic Missile` → `Force Barrage`, `Flat-Footed` → `Off-Guard`).
 
 | refType | packs |
 |---|---|
 | action | bestiary-ability-glossary-srd → actionspf2e → bestiary-family-ability-glossary → adventure-specific-actions |
 | equipment | equipment-srd |
 | spell | spells-srd (world items and `spellcasting` lists only; an actor's `items` rejects spells) |
+| feat | feats-srd (not on vehicles or hazards) |
+| effect | spell-effects → equipment-effects → feat-effects → other-effects |
 
 **equippedWeapon**: a pf2e weapon turned into an NPC strike.
 
@@ -300,7 +305,20 @@ Bare dice in descriptions become clickable rolls on import and patch:
 | `2d6+4 damage` | `@Damage[2d6+4] damage` |
 | `1d4 rounds` | `[[/r 1d4]] rounds` |
 
-Dice already inside `[[...]]`, `@Damage[...]`, `@Check[...]` or an html tag are left alone. Write `\2d6` to keep dice as plain text (`\2d6` inside a double-quoted YAML string). This works in item descriptions, hazard text fields and vehicle descriptions.
+Dice already inside `[[...]]`, `@Damage[...]`, `@Check[...]` or an html tag are left alone. Write `\2d6` to keep dice as plain text (`\\2d6` inside a double-quoted YAML string). This works in item descriptions, hazard text fields and vehicle descriptions. Legacy `positive`/`negative` damage becomes `vitality`/`void`.
+
+### Condition lint
+
+With **Lint conditions** ticked (a checkbox in the import and patch previews, saved per user), the text also gets:
+
+| Written | Becomes |
+| --- | --- |
+| `frightened 2` | `[[frightened 2]]` |
+| `confused` | `[[confused]]` |
+| `flat-footed` or `[[flat-footed]]` | `[[off-guard]]` |
+| `[[stupified 1]]` | `[[stupefied 1]]` |
+
+Only the first plain mention of each condition in a text is marked, and only if it isn't linked there already. Conditions that are usually ordinary words (`hostile`, `friendly`, `broken`, `observed`, …) are skipped. Every automatic change, dice included, is listed under **Automatic text fixes** in the preview; untick one to keep that text as written.
 
 ### World items (`item`, `itemBatch`)
 

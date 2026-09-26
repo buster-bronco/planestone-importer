@@ -43,7 +43,7 @@ export type InventoryFields = { [K in (typeof INVENTORY_KEYS)[number]]?: z.infer
 
 const compendiumRef = z.object({
   origin: z.literal("compendiumRef"),
-  refType: z.enum(["action", "equipment", "spell"]),
+  refType: z.enum(["action", "equipment", "spell", "feat", "effect"]),
   lookup,
   ...inventory,
 });

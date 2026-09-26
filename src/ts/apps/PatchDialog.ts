@@ -10,7 +10,9 @@ import { executePatch, type PatchResult } from "../patch/apply";
 import { executeItemPatch, prepareItemPatchText, type ItemPatchPlan, type ItemPatchResult } from "../patch/item";
 import { preparePatchText, type PatchPlan } from "../patch/prepare";
 import { aiEnabled, aiSend, worldContext } from "../settings";
-import { documentYaml, localize } from "../utils";
+import { repairErrors } from "../review";
+import { conditionLintEnabled, documentYaml, localize, setConditionLint } from "../utils";
+import { bindFixControls, fixContext, replaceLookupName } from "./fixView";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -58,6 +60,8 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
   private selected = new Set<string>();
   private notes = "";
   private aiError = "";
+  private lint = conditionLintEnabled();
+  private rejectedFixes = new Set<string>();
 
   constructor(private document: any, options: Record<string, unknown> = {}) {
     super({ id: PatchDialog.idFor(document), ...options });
@@ -100,6 +104,8 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
       warnings: plan?.warnings ?? [],
       changes: plan?.patch?.changes.changes ?? [],
       canApply: !!plan?.patch && !plan.errors.length && !this.busy,
+      // ai hunks rebuild the text, so name picks only work on hand-written patches
+      review: fixContext(plan, this.lint, !this.raw),
       result: this.result,
     };
   }
@@ -125,10 +131,39 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
     for (const box of this.element.querySelectorAll("input[data-hunk]") as NodeListOf<HTMLInputElement>) {
       box.addEventListener("change", () => this.toggleHunk(box.dataset.hunk!, box.checked));
     }
+
+    bindFixControls(this.element, {
+      toggleFix: (id, applied) => {
+        if (applied) this.rejectedFixes.delete(id);
+        else this.rejectedFixes.add(id);
+        void this.reprepare();
+      },
+      toggleLint: async (enabled) => {
+        this.lint = enabled;
+        await setConditionLint(enabled);
+        void this.reprepare();
+      },
+      pick: (name, candidate) => {
+        const text = replaceLookupName(this.text, name, candidate);
+        if (text === null) return ui.notifications.warn(`${localize("review.pickFailed")}: ${name}`);
+        this.text = text;
+        void this.reprepare();
+      },
+    });
+  }
+
+  // same text, new fix choices
+  private async reprepare() {
+    if (this.busy || !this.plan) return;
+    this.busy = true;
+    await this.refreshPlan();
+    this.busy = false;
+    await this.render();
   }
 
   private prepare(text: string): Promise<PatchPlan | ItemPatchPlan> {
-    return this.isItem ? prepareItemPatchText(this.document, text) : preparePatchText(this.document, text, vocabulary());
+    const options = { lint: this.lint, rejectFixes: this.rejectedFixes };
+    return this.isItem ? prepareItemPatchText(this.document, text, options) : preparePatchText(this.document, text, vocabulary(), options);
   }
 
   static async onPreview(this: PatchDialog) {
@@ -139,7 +174,7 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
       this.plan = await this.prepare(this.text);
     } catch (err) {
       console.error(CONSTANTS.DEBUG_PREFIX, err);
-      this.plan = { patch: null, errors: [(err as Error).message], warnings: [] };
+      this.plan = { patch: null, errors: [(err as Error).message], warnings: [], fixes: [], suggestions: [] };
     }
     this.busy = false;
     this.stage = "preview";
@@ -205,7 +240,7 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
     const start = async () => {
       const kind = this.isItem ? "itemPatch" : "actorPatch";
       const system = patchSystemPrompt({ kind, sheet: documentYaml(this.document), context: await worldContext() });
-      return new AiSession(system, aiSend(), async (reply) => (await this.prepare(splitReply(reply).yaml)).errors);
+      return new AiSession(system, aiSend(), async (reply) => repairErrors(await this.prepare(splitReply(reply).yaml)));
     };
     await this.runAi(start, (session) => session.ask(request));
   }
@@ -280,7 +315,7 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
       this.plan = await this.prepare(this.text);
     } catch (err) {
       console.error(CONSTANTS.DEBUG_PREFIX, err);
-      this.plan = { patch: null, errors: [(err as Error).message], warnings: [] };
+      this.plan = { patch: null, errors: [(err as Error).message], warnings: [], fixes: [], suggestions: [] };
     }
   }
 

@@ -1,4 +1,5 @@
 import CONSTANTS from "./constants";
+import { rank, type Ranked } from "./fuzzy";
 import type { LinkTarget } from "./linkMarks";
 
 interface IndexEntry {
@@ -7,6 +8,8 @@ interface IndexEntry {
   type: string;
   uuid: string;
 }
+
+export type RefType = keyof typeof CONSTANTS.PACKS_BY_REF_TYPE;
 
 export interface LookupHit {
   uuid: string;
@@ -48,6 +51,30 @@ export class PackIndex {
     }
     if (!hits.length) return null;
     return { ...hits[0], alternatives: hits.slice(1).map((hit) => hit.uuid) };
+  }
+
+  // closest names in these packs, for a lookup that missed
+  async suggest(packIds: readonly string[], name: string, types?: string[]): Promise<Ranked[]> {
+    const candidates: Ranked[] = [];
+    for (const packId of packIds) {
+      for (const entry of (await this.entries(packId)) ?? []) {
+        if (!types || types.includes(entry.type)) candidates.push({ name: entry.name, uuid: entry.uuid, pack: packId, score: 0 });
+      }
+    }
+    return rank(name, candidates);
+  }
+
+  // exact name in another refType's packs, e.g. a feat looked up as an action
+  async elsewhere(name: string, skip: RefType): Promise<{ refType: RefType; name: string } | null> {
+    const wanted = name.trim().toLowerCase();
+    for (const [refType, packIds] of Object.entries(CONSTANTS.PACKS_BY_REF_TYPE) as [RefType, readonly string[]][]) {
+      if (refType === skip) continue;
+      for (const packId of packIds) {
+        const entry = (await this.entries(packId))?.find((e) => e.name.toLowerCase() === wanted);
+        if (entry) return { refType, name: entry.name };
+      }
+    }
+    return null;
   }
 
   // name → link target map for [[term]] marks, first pack wins

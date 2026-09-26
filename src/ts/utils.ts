@@ -35,3 +35,16 @@ export function documentYaml(document: any): string {
   const source = document.toObject();
   return exportYaml(document.documentName === "Item" ? exportItem(source, compendiumName) : exportActor(source, compendiumName));
 }
+
+// off outside foundry, e.g. unit tests
+export function conditionLintEnabled(): boolean {
+  try {
+    return getGame().settings.get(CONSTANTS.MODULE_ID, "conditionLint") as boolean;
+  } catch {
+    return false;
+  }
+}
+
+export async function setConditionLint(enabled: boolean): Promise<void> {
+  await getGame().settings.set(CONSTANTS.MODULE_ID, "conditionLint", enabled);
+}

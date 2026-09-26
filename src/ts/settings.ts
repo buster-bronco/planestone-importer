@@ -39,6 +39,8 @@ export function registerSettings() {
   settings.register(ID, "aiWorldContext", { scope: "client", config: false, type: String, default: "" });
   // data folder paths, read fresh on every prompt
   settings.register(ID, "aiWorldContextFiles", { scope: "client", config: false, type: Array, default: [] });
+  // user scope follows the gm across browsers; the import and patch dialogs toggle it
+  settings.register(ID, "conditionLint", { scope: "user", config: false, type: Boolean, default: true });
   settings.registerMenu(ID, "aiWorldContextMenu", {
     name: key("aiWorldContext.name"),
     label: key("aiWorldContext.label"),

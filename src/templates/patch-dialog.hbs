@@ -51,6 +51,37 @@
         {{/if}}
       {{/if}}
 
+      <div class="hunks text-fixes">
+        <label class="hunk lint-toggle" data-tooltip="{{localize "planestone-importer.review.lintHint"}}">
+          <input type="checkbox" data-lint {{#if review.lint}}checked{{/if}} {{#if busy}}disabled{{/if}}>
+          <span>{{localize "planestone-importer.review.lint"}}</span>
+        </label>
+        {{#if review.fixes.length}}
+          <h4>{{localize "planestone-importer.review.fixes"}}</h4>
+          {{#each review.fixes}}
+            <label class="hunk {{#unless checked}}rejected{{/unless}}">
+              <input type="checkbox" data-fix="{{id}}" {{#if checked}}checked{{/if}} {{#if ../busy}}disabled{{/if}}>
+              <span><small class="fix-kind">{{kind}}</small> {{label}}</span>
+            </label>
+          {{/each}}
+        {{/if}}
+        {{#if review.suggestions.length}}
+          <h4>{{localize "planestone-importer.review.suggestions"}}</h4>
+          {{#each review.suggestions}}
+            <div class="suggestion">
+              <span>{{where}}</span>
+              {{#each candidates}}
+                {{#if ../../review.canPick}}
+                  <button type="button" data-pick="{{name}}" data-name="{{../name}}" {{#if ../../busy}}disabled{{/if}}>{{name}} ({{score}})</button>
+                {{else}}
+                  <span class="candidate">{{name}} ({{score}})</span>
+                {{/if}}
+              {{/each}}
+            </div>
+          {{/each}}
+        {{/if}}
+      </div>
+
       {{#if errors.length}}
         <div class="messages errors">
           <h4>{{localize "planestone-importer.patch.errors"}}</h4>

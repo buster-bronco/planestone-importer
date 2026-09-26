@@ -116,6 +116,26 @@
     }
   }
 
+  .fix-kind {
+    padding: 0 0.3rem;
+    border: 1px solid var(--color-border, #7a7971);
+    border-radius: 3px;
+    opacity: 0.8;
+  }
+
+  .suggestion {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+
+    button {
+      flex: 0 0 auto;
+      width: auto;
+      line-height: 1.4;
+    }
+  }
+
   .hunk-error {
     display: block;
     color: #c82828;

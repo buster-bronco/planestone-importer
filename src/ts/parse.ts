@@ -156,6 +156,10 @@ function checkWorldItem(item: SheetItem, where: string, result: ParsedSheet): vo
   }
 }
 
+function isFeatRef(item: SheetItem): boolean {
+  return item.origin === "compendiumRef" && item.refType === "feat";
+}
+
 // vehicles hold actions and gear; pf2e vehicle sheets have no strikes
 function checkVehicle(vehicle: VehicleDoc, result: ParsedSheet): void {
   const name = vehicle.meta.name;
@@ -163,7 +167,8 @@ function checkVehicle(vehicle: VehicleDoc, result: ParsedSheet): void {
     if (item.origin === "equippedWeapon" || isHomebrewStrike(item)) {
       result.errors.push(`${name}: items.${index}: vehicles can't hold strikes; describe mounted weapons as homebrew actions`);
     } else if (isSpellItem(item)) {
-      result.errors.push(`${name}: items.${index}: vehicles can't hold spells`);
+      result.errors.push(`${name}: items.${index}: vehicles can't hold spells`);    } else if (isFeatRef(item)) {
+      result.errors.push(`${name}: items.${index}: vehicles can't hold feats`);
     }
   });
 }
@@ -175,7 +180,8 @@ function checkHazard(hazard: HazardDoc, result: ParsedSheet): void {
     if (item.origin === "equippedWeapon") {
       result.errors.push(`${name}: items.${index}: hazards can't use equippedWeapon; write the attack as a homebrew melee or ranged strike`);
     } else if (isSpellItem(item)) {
-      result.errors.push(`${name}: items.${index}: hazards can't hold spells; describe the effect in a homebrew action`);
+      result.errors.push(`${name}: items.${index}: hazards can't hold spells; describe the effect in a homebrew action`);    } else if (isFeatRef(item)) {
+      result.errors.push(`${name}: items.${index}: hazards can't hold feats; describe the effect in a homebrew action or passive`);
     }
   });
   if (hazard.core.routine && !hazard.core.complex) result.warnings.push(`${name}: routine is set but complex is false; pf2e only shows it on complex hazards`);
