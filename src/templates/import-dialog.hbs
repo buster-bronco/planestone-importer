@@ -48,6 +48,17 @@
         </table>
       {{/if}}
 
+      {{#if hazards.length}}
+        <table class="actors">
+          <thead><tr><th>{{localize "planestone-importer.dialog.hazard"}}</th><th>{{localize "planestone-importer.dialog.level"}}</th><th>{{localize "planestone-importer.dialog.items"}}</th></tr></thead>
+          <tbody>
+            {{#each hazards}}
+              <tr><td>{{name}}{{#if complex}} ({{localize "planestone-importer.dialog.complex"}}){{/if}}</td><td>{{level}}</td><td>{{itemCount}}</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      {{/if}}
+
       {{#if items.length}}
         <table class="actors">
           <thead><tr><th>{{localize "planestone-importer.dialog.name"}}</th><th>{{localize "planestone-importer.dialog.type"}}</th></tr></thead>

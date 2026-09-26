@@ -237,21 +237,76 @@ const vehicleBody = z.object({
 export type VehicleDoc = z.infer<typeof vehicleBody>;
 export type VehicleCoreData = VehicleDoc["core"];
 
-export function isVehicleDoc(doc: ActorDoc | VehicleDoc): doc is VehicleDoc {
+// ---------------------------------------------------------------------------
+// hazard (§2c)
+// ---------------------------------------------------------------------------
+
+export const hazardMetaSchema = z.object({
+  name: z.string().min(1),
+  actorType: z.literal("hazard").default("hazard"),
+  level: z.number().int().min(-1).max(30),
+  source: z.string().optional(),
+});
+
+export const hazardCoreSchema = z.object({
+  traits: z.array(z.string()).default([]),
+  rarity: z.enum(["common", "uncommon", "rare", "unique"]).default("common"),
+  size: z.string().default("medium"),
+  // complex hazards roll initiative and follow a routine
+  complex: z.boolean().default(false),
+  // stealth dc is mod + 10; notes hold the proficiency needed to notice it
+  stealth: z.object({ mod: z.number().int(), notes: z.string().optional() }),
+  description: z.string().default(""),
+  disable: z.string().default(""),
+  routine: z.string().default(""),
+  reset: z.string().default(""),
+  ac: z.number().int().optional(),
+  // missing saves stay blank on the sheet
+  saves: z
+    .object({ fortitude: z.number().int().optional(), reflex: z.number().int().optional(), will: z.number().int().optional() })
+    .strict()
+    .default({}),
+  hardness: z.number().int().min(0).default(0),
+  // no hp means the hazard can't be damaged (pf2e hasHealth)
+  hp: z.object({ value: z.number().int().positive(), notes: z.string().optional() }).optional(),
+  emitsSound: z.union([z.boolean(), z.literal("encounter")]).default("encounter"),
+  resistances: z.array(resistanceEntry).default([]),
+  weaknesses: z.array(weaknessEntry).default([]),
+  immunities: z.array(immunityEntry).default([]),
+});
+
+const hazardBody = z.object({
+  meta: hazardMetaSchema,
+  core: hazardCoreSchema,
+  items: z.array(sheetItem).default([]),
+});
+
+export type HazardDoc = z.infer<typeof hazardBody>;
+export type HazardCoreData = HazardDoc["core"];
+
+export type AnyActorDoc = ActorDoc | VehicleDoc | HazardDoc;
+
+export function isVehicleDoc(doc: AnyActorDoc): doc is VehicleDoc {
   return doc.meta.actorType === "vehicle";
 }
+
+export function isHazardDoc(doc: AnyActorDoc): doc is HazardDoc {
+  return doc.meta.actorType === "hazard";
+}
+
+const bodyByType = { npc: actorBody, vehicle: vehicleBody, hazard: hazardBody };
 
 // batch entries split on meta.actorType (or kind), parsed in a second step like homebrew items
 const batchActor = z
   .object({
-    kind: z.enum(["actor", "vehicle"]).optional(),
-    meta: z.object({ actorType: z.enum(["npc", "vehicle"]).optional() }).passthrough(),
+    kind: z.enum(["actor", "vehicle", "hazard"]).optional(),
+    meta: z.object({ actorType: z.enum(["npc", "vehicle", "hazard"]).optional() }).passthrough(),
   })
   .passthrough()
-  .transform((value, ctx): ActorDoc | VehicleDoc => {
+  .transform((value, ctx): AnyActorDoc => {
     const { kind, ...fields } = value;
-    const isVehicle = kind === "vehicle" || value.meta.actorType === "vehicle";
-    const parsed = (isVehicle ? vehicleBody : actorBody).safeParse(fields);
+    const type = kind && kind !== "actor" ? kind : (value.meta.actorType ?? "npc");
+    const parsed = bodyByType[type].safeParse(fields);
     if (parsed.success) return parsed.data;
     for (const issue of parsed.error.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, path: issue.path, message: issue.message });
     return z.NEVER;
@@ -343,6 +398,7 @@ const envelope = { schemaVersion: z.literal(1) };
 export const sheetFile = z.discriminatedUnion("kind", [
   actorBody.extend({ ...envelope, kind: z.literal("actor") }),
   vehicleBody.extend({ ...envelope, kind: z.literal("vehicle") }),
+  hazardBody.extend({ ...envelope, kind: z.literal("hazard") }),
   spellListBody.extend({ ...envelope, kind: z.literal("spellList") }),
   actorPatchBody.extend({ ...envelope, kind: z.literal("actorPatch") }),
   itemPatchBody.extend({ ...envelope, kind: z.literal("itemPatch") }),

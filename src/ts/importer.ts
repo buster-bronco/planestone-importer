@@ -1,11 +1,12 @@
 import CONSTANTS from "./constants";
 import { buildActorSystem, type Vocabulary } from "./build/actorData";
+import { buildHazardSystem, HAZARD_HTML_FIELDS } from "./build/hazardData";
 import { buildVehicleSystem } from "./build/vehicleData";
-import { addWeaponStrike, resolveItem, sheetItemName, type PreparedWeapon } from "./items";
+import { addWeaponStrike, linkHtml, resolveItem, sheetItemName, type PreparedWeapon } from "./items";
 import type { LinkTarget } from "./linkMarks";
 import { PackIndex } from "./packIndex";
 import { parseSheetText } from "./parse";
-import type { ActorDoc, SheetItem, VehicleDoc } from "./schema";
+import type { ActorDoc, HazardDoc, SheetItem, VehicleDoc } from "./schema";
 import { getGame } from "./utils";
 
 export type { PreparedWeapon } from "./items";
@@ -19,13 +20,17 @@ export interface PreparedActor {
   errors: string[];
 }
 
-export interface PreparedVehicle {
-  doc: VehicleDoc;
+// vehicles and hazards: system data plus plain items, no weapon strikes
+export interface PreparedSimpleActor<Doc> {
+  doc: Doc;
   system: Record<string, unknown>;
   items: any[];
   warnings: string[];
   errors: string[];
 }
+
+export type PreparedVehicle = PreparedSimpleActor<VehicleDoc>;
+export type PreparedHazard = PreparedSimpleActor<HazardDoc>;
 
 export interface PreparedWorldItem {
   doc: SheetItem;
@@ -35,6 +40,7 @@ export interface PreparedWorldItem {
 export interface ImportPlan {
   actors: PreparedActor[];
   vehicles: PreparedVehicle[];
+  hazards: PreparedHazard[];
   items: PreparedWorldItem[];
   errors: string[];
   warnings: string[];
@@ -54,6 +60,7 @@ export function vocabulary(): Vocabulary {
   return {
     creatureTraits: keys(pf2e.creatureTraits),
     vehicleTraits: keys(pf2e.vehicleTraits),
+    hazardTraits: keys(pf2e.hazardTraits),
     languages: keys(pf2e.languages),
     senses: keys(pf2e.senses),
     skills: keys(pf2e.skills),
@@ -77,14 +84,18 @@ async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string
   return prepared;
 }
 
-async function prepareVehicle(doc: VehicleDoc, index: PackIndex, targets: Map<string, LinkTarget>, vocab: Vocabulary): Promise<PreparedVehicle> {
-  const { system, warnings } = buildVehicleSystem(doc, vocab);
-  const prepared: PreparedVehicle = { doc, system, items: [], warnings, errors: [] };
+async function prepareSimpleActor<Doc extends VehicleDoc | HazardDoc>(
+  doc: Doc,
+  build: { system: Record<string, unknown>; warnings: string[] },
+  index: PackIndex,
+  targets: Map<string, LinkTarget>,
+): Promise<PreparedSimpleActor<Doc>> {
+  const prepared: PreparedSimpleActor<Doc> = { doc, system: build.system, items: [], warnings: build.warnings, errors: [] };
   const name = doc.meta.name;
   const warn = (message: string) => prepared.warnings.push(`${name}: ${message}`);
   const fail = (message: string) => prepared.errors.push(`${name}: ${message}`);
 
-  // parse.ts already rejects strikes and weapons on vehicles
+  // parse.ts already rejects weapon strikes and spells here
   for (const item of doc.items) {
     const resolved = await resolveItem(item, { index, targets, warn, fail });
     if (resolved && "data" in resolved) prepared.items.push(resolved.data);
@@ -93,10 +104,19 @@ async function prepareVehicle(doc: VehicleDoc, index: PackIndex, targets: Map<st
   return prepared;
 }
 
+// [[...]] marks in the hazard's own text fields, not just its items
+function linkHazardText(prepared: PreparedHazard, targets: Map<string, LinkTarget>): void {
+  const name = prepared.doc.meta.name;
+  const warn = (message: string) => prepared.warnings.push(`${name}: ${message}`);
+  const system = prepared.system as any;
+  for (const field of HAZARD_HTML_FIELDS) system.details[field] = linkHtml(system.details[field], `${name} ${field}`, targets, warn);
+  system.attributes.stealth.details = linkHtml(system.attributes.stealth.details, `${name} stealth`, targets, warn);
+}
+
 // parse, validate and resolve everything without touching the world
 export async function prepareImport(text: string): Promise<ImportPlan> {
   const parsed = parseSheetText(text);
-  const plan: ImportPlan = { actors: [], vehicles: [], items: [], errors: [...parsed.errors], warnings: [...parsed.warnings] };
+  const plan: ImportPlan = { actors: [], vehicles: [], hazards: [], items: [], errors: [...parsed.errors], warnings: [...parsed.warnings] };
   if (parsed.patches.length) plan.errors.push("patches are applied from an npc sheet's Patch button");
   if (parsed.itemPatches.length) plan.errors.push("item patches are applied from an item sheet's Patch button");
   if (plan.errors.length) return plan;
@@ -111,8 +131,15 @@ export async function prepareImport(text: string): Promise<ImportPlan> {
     plan.warnings.push(...prepared.warnings);
   }
   for (const doc of parsed.vehicles) {
-    const prepared = await prepareVehicle(doc, index, targets, vocab);
+    const prepared = await prepareSimpleActor(doc, buildVehicleSystem(doc, vocab), index, targets);
     plan.vehicles.push(prepared);
+    plan.errors.push(...prepared.errors);
+    plan.warnings.push(...prepared.warnings);
+  }
+  for (const doc of parsed.hazards) {
+    const prepared = await prepareSimpleActor(doc, buildHazardSystem(doc, vocab), index, targets);
+    linkHazardText(prepared, targets);
+    plan.hazards.push(prepared);
     plan.errors.push(...prepared.errors);
     plan.warnings.push(...prepared.warnings);
   }
@@ -192,12 +219,16 @@ export async function executeImport(plan: ImportPlan, options: ImportOptions = {
     }
   }
 
-  for (const prepared of plan.vehicles) {
+  const simple: [string, PreparedSimpleActor<VehicleDoc | HazardDoc>][] = [
+    ...plan.vehicles.map((prepared): [string, PreparedVehicle] => ["vehicle", prepared]),
+    ...plan.hazards.map((prepared): [string, PreparedHazard] => ["hazard", prepared]),
+  ];
+  for (const [type, prepared] of simple) {
     const { meta } = prepared.doc;
     try {
       const actor = await Actor.implementation.create({
         name: meta.name,
-        type: "vehicle",
+        type,
         folder,
         system: prepared.system,
         items: prepared.items,

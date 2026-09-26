@@ -1,0 +1,35 @@
+schemaVersion: 1
+kind: hazard
+meta:
+  name: Flooding Bilge
+  level: 4
+  source: "Dev"
+
+core:
+  traits: [mechanical, trap]
+  rarity: common
+  complex: true
+  stealth: { mod: 12, notes: "(trained) to notice the loose sea cock" }
+  description: "A rusted sea cock gives way and the hold starts to flood."
+  disable: "@Check[thievery|dc:21] (trained) to reseat the valve, or @Check[athletics|dc:23] to force it shut."
+  routine: "(1 action) Water rises 1 foot. Each creature in the hold must succeed at a @Check[reflex|dc:21] save or be knocked [[prone]]."
+  reset: "The hold drains after 1 hour at the pumps."
+  ac: 21
+  saves: { fortitude: 13, reflex: 9 }
+  hardness: 8
+  hp: { value: 32, notes: "to break the valve open for good" }
+  immunities: [{ type: critical-hits }, { type: object-immunities }, { type: precision }]
+
+items:
+  - origin: homebrew
+    type: action
+    name: Burst Valve
+    actionType: reaction
+    trigger: "A creature enters the hold."
+    description: "The valve bursts and the hazard rolls initiative."
+
+  - origin: homebrew
+    type: melee
+    name: Pressure Jet
+    attackBonus: 14
+    damageRolls: [{ damage: "2d6+5", damageType: bludgeoning }]

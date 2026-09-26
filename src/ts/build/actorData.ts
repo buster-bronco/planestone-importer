@@ -5,6 +5,7 @@ import { sluggify } from "../slug";
 export interface Vocabulary {
   creatureTraits?: Set<string>;
   vehicleTraits?: Set<string>;
+  hazardTraits?: Set<string>;
   languages?: Set<string>;
   senses?: Set<string>;
   skills?: Set<string>;

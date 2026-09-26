@@ -57,3 +57,10 @@ actors:
       hardness: 5
       hp: { value: 40 }
       speed: "swim 20 feet (rowed)"
+
+  - meta: { name: Loose Rigging, actorType: hazard, level: 1 }
+    core:
+      traits: [mechanical, trap]
+      stealth: { mod: 6, notes: "(trained)" }
+      description: "A snapped line swings across the deck."
+      disable: "@Check[athletics|dc:16] to lash the line down"

@@ -78,7 +78,7 @@ export async function preparePatchText(actor: any, text: string, vocab: Vocabula
   const parsed = parseSheetText(text);
   const plan: PatchPlan = { patch: null, errors: [...parsed.errors], warnings: [...parsed.warnings] };
   if (plan.errors.length) return plan;
-  if (parsed.patches.length !== 1 || parsed.itemPatches.length || parsed.actors.length || parsed.vehicles.length || parsed.items.length || parsed.spellLists.length) {
+  if (parsed.patches.length !== 1 || parsed.itemPatches.length || parsed.actors.length || parsed.vehicles.length || parsed.hazards.length || parsed.items.length || parsed.spellLists.length) {
     plan.errors.push("expected a single kind: actorPatch document");
     return plan;
   }

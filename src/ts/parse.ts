@@ -3,12 +3,14 @@ import type { ZodIssue } from "zod";
 import { normalizeOps } from "./patch/paths";
 import {
   isHomebrewAction,
+  isHazardDoc,
   isHomebrewStrike,
   isVehicleDoc,
   sheetFile,
   sheetItem,
   type ActorDoc,
   type ActorPatchDoc,
+  type HazardDoc,
   type ItemPatchDoc,
   type SheetItem,
   type SpellListDoc,
@@ -32,6 +34,7 @@ export const BUILTIN_ATTACK_EFFECTS = new Set([
 export interface ParsedSheet {
   actors: ActorDoc[];
   vehicles: VehicleDoc[];
+  hazards: HazardDoc[];
   patches: ActorPatchDoc[];
   // world items, not attached to an actor
   items: SheetItem[];
@@ -48,7 +51,7 @@ function formatIssue(issue: ZodIssue): string {
 
 // yaml is a superset of json, so one loader covers both
 export function parseSheetText(text: string): ParsedSheet {
-  const result: ParsedSheet = { actors: [], vehicles: [], patches: [], items: [], itemPatches: [], spellLists: [], errors: [], warnings: [] };
+  const result: ParsedSheet = { actors: [], vehicles: [], hazards: [], patches: [], items: [], itemPatches: [], spellLists: [], errors: [], warnings: [] };
 
   let raw: unknown;
   try {
@@ -58,7 +61,7 @@ export function parseSheetText(text: string): ParsedSheet {
     return result;
   }
 
-  const parsed = sheetFile.safeParse(asVehicleKind(raw));
+  const parsed = sheetFile.safeParse(asActorKind(raw));
   if (!parsed.success) {
     result.errors.push(...parsed.error.issues.map(formatIssue));
     return result;
@@ -67,6 +70,7 @@ export function parseSheetText(text: string): ParsedSheet {
   const doc = parsed.data;
   if (doc.kind === "actor") result.actors.push(doc);
   else if (doc.kind === "vehicle") result.vehicles.push(doc);
+  else if (doc.kind === "hazard") result.hazards.push(doc);
   else if (doc.kind === "spellList") result.spellLists.push(doc);
   else if (doc.kind === "actorPatch") result.patches.push(doc);
   else if (doc.kind === "itemPatch") result.itemPatches.push(doc);
@@ -82,6 +86,7 @@ export function parseSheetText(text: string): ParsedSheet {
   } else {
     for (const actor of doc.actors) {
       if (isVehicleDoc(actor)) result.vehicles.push(actor);
+      else if (isHazardDoc(actor)) result.hazards.push(actor);
       else result.actors.push(actor);
     }
     result.spellLists.push(...doc.spellLists);
@@ -93,16 +98,18 @@ export function parseSheetText(text: string): ParsedSheet {
 
   for (const actor of result.actors) checkActor(actor, result);
   for (const vehicle of result.vehicles) checkVehicle(vehicle, result);
+  for (const hazard of result.hazards) checkHazard(hazard, result);
   for (const patch of result.patches) checkPatch(patch, result);
   result.items.forEach((item, index) => checkWorldItem(item, doc.kind === "itemBatch" ? `items.${index}` : "(root)", result));
   return result;
 }
 
-// kind: actor with meta.actorType: vehicle reads as kind: vehicle
-function asVehicleKind(raw: unknown): unknown {
+// kind: actor with meta.actorType: vehicle or hazard reads as that kind
+function asActorKind(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const doc = raw as Record<string, any>;
-  return doc.kind === "actor" && doc.meta?.actorType === "vehicle" ? { ...doc, kind: "vehicle" } : raw;
+  const type = doc.meta?.actorType;
+  return doc.kind === "actor" && (type === "vehicle" || type === "hazard") ? { ...doc, kind: type } : raw;
 }
 
 export function patchLabel(patch: ActorPatchDoc): string {
@@ -136,6 +143,20 @@ function checkVehicle(vehicle: VehicleDoc, result: ParsedSheet): void {
   });
 }
 
+// hazards take homebrew strikes, but weapon strike math needs npc attributes
+function checkHazard(hazard: HazardDoc, result: ParsedSheet): void {
+  const name = hazard.meta.name;
+  hazard.items.forEach((item, index) => {
+    if (item.origin === "equippedWeapon") {
+      result.errors.push(`${name}: items.${index}: hazards can't use equippedWeapon; write the attack as a homebrew melee or ranged strike`);
+    } else if (item.origin === "compendiumRef" && item.refType === "spell") {
+      result.errors.push(`${name}: items.${index}: hazards can't hold spells; describe the effect in a homebrew action`);
+    }
+  });
+  if (hazard.core.routine && !hazard.core.complex) result.warnings.push(`${name}: routine is set but complex is false; pf2e only shows it on complex hazards`);
+  checkAttackEffects(name, hazard.items, result);
+}
+
 // ok: an action on the actor; builtin: pf2e knows it without one; unknown: neither
 export function classifyAttackEffect(effect: string, actionSlugs: Set<string>): "ok" | "builtin" | "unknown" {
   const slug = sluggify(effect);
@@ -143,17 +164,15 @@ export function classifyAttackEffect(effect: string, actionSlugs: Set<string>): 
   return BUILTIN_ATTACK_EFFECTS.has(slug) ? "builtin" : "unknown";
 }
 
-// cross-field rules zod can't express per object
-function checkActor(actor: ActorDoc, result: ParsedSheet): void {
-  const name = actor.meta.name;
-
+// strike attackEffects point at action items on the same actor
+function checkAttackEffects(name: string, items: SheetItem[], result: ParsedSheet): void {
   const actionSlugs = new Set<string>();
-  for (const item of actor.items) {
+  for (const item of items) {
     if (isHomebrewAction(item)) actionSlugs.add(sluggify(item.name));
     if (item.origin === "compendiumRef" && item.refType === "action") actionSlugs.add(sluggify(item.lookup.name));
   }
 
-  actor.items.forEach((item, index) => {
+  items.forEach((item, index) => {
     if (!isHomebrewStrike(item)) return;
     for (const effect of item.attackEffects) {
       const kind = classifyAttackEffect(effect, actionSlugs);
@@ -164,6 +183,12 @@ function checkActor(actor: ActorDoc, result: ParsedSheet): void {
       }
     }
   });
+}
+
+// cross-field rules zod can't express per object
+function checkActor(actor: ActorDoc, result: ParsedSheet): void {
+  const name = actor.meta.name;
+  checkAttackEffects(name, actor.items, result);
 
   if (actor.spellcasting !== undefined) {
     const ref = actor.spellcasting;

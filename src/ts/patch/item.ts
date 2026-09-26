@@ -98,7 +98,7 @@ export async function prepareItemPatchText(item: any, text: string): Promise<Ite
   const parsed = parseSheetText(text);
   const plan: ItemPatchPlan = { patch: null, errors: [...parsed.errors], warnings: [...parsed.warnings] };
   if (plan.errors.length) return plan;
-  if (parsed.itemPatches.length !== 1 || parsed.patches.length || parsed.actors.length || parsed.vehicles.length || parsed.items.length || parsed.spellLists.length) {
+  if (parsed.itemPatches.length !== 1 || parsed.patches.length || parsed.actors.length || parsed.vehicles.length || parsed.hazards.length || parsed.items.length || parsed.spellLists.length) {
     plan.errors.push("expected a single kind: itemPatch document");
     return plan;
   }

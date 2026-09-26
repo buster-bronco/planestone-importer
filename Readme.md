@@ -1,6 +1,6 @@
 # Planestone Importer
 
-A Foundry VTT module that imports **Planestone sheet** files (YAML or JSON) as pf2e NPC actors, vehicles and world items. Built for my own game.
+A Foundry VTT module that imports **Planestone sheet** files (YAML or JSON) as pf2e NPC actors, vehicles, hazards and world items. Built for my own game.
 
 - Foundry **v13–v14**, pf2e **7.2.x**
 - GM-only **Import Sheet** button in the Actors and Items sidebars
@@ -29,7 +29,7 @@ Releases work like emotive-hud: publishing a GitHub release runs `.github/workfl
 ## Usage
 
 1. Enable the module in a pf2e world.
-2. Actors or Items sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file, or paste a sheet and hit **Load text**. Both buttons open the same dialog, and it accepts NPCs, vehicles and world items.
+2. Actors or Items sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file, or paste a sheet and hit **Load text**. Both buttons open the same dialog, and it accepts NPCs, vehicles, hazards and world items.
 3. Check the preview (actors, item counts, world items, warnings), pick destination folders (they default to the sidebar roots) → **Import**.
 4. To change an existing NPC or world item later, use **Patch** in its sheet header (see [Patches](#patches-actorpatch) and [Item patches](#item-patches-itempatch)).
 
@@ -48,16 +48,16 @@ const { plan, result } = await api.applyItemPatch(item, itemPatchYaml); // world
 
 ## Planestone sheet format (v1)
 
-See [`examples/`](examples) for complete files: `actor.yaml`, `vehicle.yaml`, `batch.yaml`, `items.yaml`, `patch.yaml`, `item-patch.yaml` and `broken.yaml` (every validation error on purpose).
+See [`examples/`](examples) for complete files: `actor.yaml`, `vehicle.yaml`, `hazard.yaml`, `batch.yaml`, `items.yaml`, `patch.yaml`, `item-patch.yaml` and `broken.yaml` (every validation error on purpose).
 
 ### Envelope
 
 ```yaml
 schemaVersion: 1
-kind: actor | vehicle | spellList | actorBatch | item | itemBatch | actorPatch | itemPatch
+kind: actor | vehicle | hazard | spellList | actorBatch | item | itemBatch | actorPatch | itemPatch
 ```
 
-`actorBatch` holds `actors: [...]` and `spellLists: [...]`. Actors inside a batch don't need `schemaVersion`/`kind`. A batch can mix NPCs and vehicles: give a vehicle entry `meta.actorType: vehicle`.
+`actorBatch` holds `actors: [...]` and `spellLists: [...]`. Actors inside a batch don't need `schemaVersion`/`kind`. A batch can mix NPCs, vehicles and hazards: give a vehicle or hazard entry `meta.actorType: vehicle` or `meta.actorType: hazard`.
 
 ### Actor
 
@@ -115,6 +115,34 @@ items: [...]
 ```
 
 Only `ac`, `saves.fortitude`, `hp.value`, `meta.name` and `meta.level` are required. Vehicle `items` take homebrew `action`/`passive` entries and `compendiumRef` actions or equipment. Strikes, `equippedWeapon` and spells are errors, because pf2e vehicle sheets have no strikes; write mounted weapons as homebrew actions. Vehicles can't be patched or copied yet.
+
+### Hazard
+
+A pf2e hazard actor: traps, haunts, environmental dangers. Use `kind: hazard`, or `kind: actor` with `meta.actorType: hazard`. See [`examples/hazard.yaml`](examples/hazard.yaml).
+
+```yaml
+meta: { name, actorType: hazard, level, source }
+core:
+  traits: [mechanical, trap]    # hazard trait slugs (CONFIG.PF2E.hazardTraits)
+  rarity: common
+  complex: false                # complex hazards roll initiative and use routine
+  stealth: { mod: 12, notes: "(trained)" }   # required; DC is mod + 10
+  description: "…"              # html, or plain text (wrapped in <p>)
+  disable: "@Check[thievery|dc:21] (trained) to jam the mechanism"
+  routine: "(1 action) …"       # complex hazards only
+  reset: "…"
+  ac: 21                        # optional
+  saves: { fortitude: 13, reflex: 9 }   # any of the three; missing ones stay blank
+  hardness: 8
+  hp: { value: 32, notes: "…" } # optional; without hp the hazard can't be damaged
+  emitsSound: encounter         # true | false | encounter
+  resistances: [{ type, value, exceptions: [] }]
+  weaknesses: [{ type, value }]
+  immunities: [{ type }]
+items: [...]
+```
+
+Only `stealth.mod`, `meta.name` and `meta.level` are required. `[[...]]` link marks work in `description`, `disable`, `routine`, `reset` and `stealth.notes`. Hazard `items` take homebrew actions, passives and `melee`/`ranged` strikes (with the same `attackEffects` rules as NPCs), plus `compendiumRef` actions or equipment. `equippedWeapon` is an error because weapon strike math needs NPC attributes, and so are spells. A `routine` on a hazard that isn't `complex` gives a warning. Hazards can't be patched or copied yet.
 
 ### Items
 
