@@ -5,6 +5,7 @@
       <textarea name="patchText" class="paste" spellcheck="false" placeholder="{{placeholder}}" {{#if busy}}disabled{{/if}}>{{text}}</textarea>
     </div>
     <footer class="buttons">
+      <button type="button" data-action="copySheet" data-tooltip="{{localize "planestone-importer.patch.copySheetHint"}}"><i class="fa-solid fa-copy"></i> {{localize "planestone-importer.patch.copySheet"}}</button>
       <label class="button file-button">
         <i class="fa-solid fa-file-arrow-up"></i> {{localize "planestone-importer.patch.fromFile"}}
         <input type="file" accept=".yaml,.yml,.json" {{#if busy}}disabled{{/if}}>

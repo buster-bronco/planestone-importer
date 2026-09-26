@@ -31,7 +31,8 @@
       "imported": "Documents created",
       "patched": "NPC patched",
       "patchFailed": "Patch failed, changes rolled back",
-      "itemPatched": "Item patched"
+      "itemPatched": "Item patched",
+      "copied": "Sheet copied to clipboard"
     },
     "sheet": {
       "patch": "Patch"
@@ -48,7 +49,9 @@
       "applied": "Patch applied.",
       "another": "Edit patch",
       "itemTitle": "Patch Item",
-      "itemHint": "Paste a Planestone item patch (kind: itemPatch) or load one from a file. Nothing changes until you apply the preview."
+      "itemHint": "Paste a Planestone item patch (kind: itemPatch) or load one from a file. Nothing changes until you apply the preview.",
+      "copySheet": "Copy sheet",
+      "copySheetHint": "Copy this document's current Planestone sheet (YAML) to the clipboard"
     }
   }
 }

@@ -8,5 +8,6 @@ declare const foundry: any;
 declare const Actor: any;
 declare const Item: any;
 declare function fromUuid(uuid: string): Promise<any>;
+declare function fromUuidSync(uuid: string): any;
 
 declare module "*.scss";

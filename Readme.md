@@ -258,6 +258,15 @@ Weapon strikes carry `flags.planestone-importer.strike`. When a patch changes th
 
 The preview lists every change before anything is written. If applying a patch fails partway, the actor is restored from a snapshot.
 
+### Copy sheet
+
+**Copy sheet** in the Patch dialog copies the NPC's or item's current state to the clipboard as a Planestone sheet (`kind: actor` or `kind: item`). You can use it as a reference while writing a patch, or re-import it as a copy.
+
+- Compendium items become `compendiumRef` entries that use the compendium entry's name and pack. Imported weapon strikes are grouped back into `equippedWeapon` entries.
+- Actions and strikes with no compendium source become `homebrew` entries. A reaction's trigger is split back out of its description.
+- Descriptions are exported as stored HTML, so resolved links stay as `@UUID[...]` and don't turn back into `[[...]]` marks.
+- Items with no sheet form, like NPC spells, effects or hand-made loot, are listed as `# not exported:` comments at the top.
+
 ### Item patches (`itemPatch`)
 
 An item patch changes one world item. Open the item's sheet and click **Patch** in the header (GM only, world items only; items on an actor are patched through the actor's `items.update`). See [`examples/item-patch.yaml`](examples/item-patch.yaml).

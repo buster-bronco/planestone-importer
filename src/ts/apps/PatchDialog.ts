@@ -1,4 +1,5 @@
 import CONSTANTS from "../constants";
+import { exportActor, exportItem, exportYaml } from "../export";
 import { vocabulary } from "../importer";
 import { executePatch, type PatchResult } from "../patch/apply";
 import { executeItemPatch, prepareItemPatchText, type ItemPatchPlan, type ItemPatchResult } from "../patch/item";
@@ -20,6 +21,7 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
       preview: PatchDialog.onPreview,
       apply: PatchDialog.onApply,
       back: PatchDialog.onBack,
+      copySheet: PatchDialog.onCopySheet,
     },
   };
 
@@ -110,6 +112,22 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
     if (this.result.ok) ui.notifications.info(`${localize(this.isItem ? "notify.itemPatched" : "notify.patched")}: ${this.document.name}`);
     else ui.notifications.error(`${localize("notify.patchFailed")}: ${this.result.error}`);
     await this.render();
+  }
+
+  // current document as a planestone sheet, as a starting point for a patch
+  static async onCopySheet(this: PatchDialog) {
+    const source = this.document.toObject();
+    // compendium index entries are loaded at startup, so this stays sync
+    const sourceName = (uuid: string) => {
+      try {
+        return fromUuidSync(uuid)?.name;
+      } catch {
+        return undefined;
+      }
+    };
+    const text = exportYaml(this.isItem ? exportItem(source, sourceName) : exportActor(source, sourceName));
+    await game.clipboard.copyPlainText(text);
+    ui.notifications.info(`${localize("notify.copied")}: ${this.document.name}`);
   }
 
   // keeps the text so a failed patch can be fixed and retried
