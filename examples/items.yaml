@@ -38,3 +38,20 @@ items:
     damage: [{ formula: 2d6, type: bludgeoning }]
     heightening: { every: 1, damage: [1d6] }
     description: "A whip of seawater lashes the target. On a critical hit, the target is pushed 5 feet."
+
+  - origin: homebrew
+    type: equipment
+    name: Wardstone Amulet
+    level: 3
+    rarity: uncommon
+    traits: [invested, magical]
+    price: 60
+    usage: wornamulet
+    description: "While invested, you gain a +1 item bonus to saves against effects that would move you."
+
+  - origin: homebrew
+    type: backpack
+    name: Border Satchel
+    price: 0.5
+    capacity: 2
+    ignored: 1

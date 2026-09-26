@@ -35,6 +35,7 @@ items:
     lookup: { name: "Longsword" }
     proficiency: expert
     runes: { potency: 1, striking: 1 }
+    equipped: held
 
   - origin: equippedWeapon
     lookup: { name: "Shortbow" }
@@ -64,6 +65,37 @@ items:
     category: defensive
     trigger: "An ally within 10 feet is hit by a melee attack."
     description: "The warden steps in; the ally gains resistance 5 to the triggering damage and the attacker is [[off-guard]] until the end of its turn. Roll [[/r 1d4]] rounds of shaking afterward."
+
+  # inventory: compendium gear and homebrew gear
+  - origin: compendiumRef
+    refType: equipment
+    lookup: { name: "Hide Armor" }
+    equipped: true              # armor is worn in its slot
+  - origin: compendiumRef
+    refType: equipment
+    lookup: { name: "Healing Potion (Minor)" }
+    quantity: 2
+  - origin: compendiumRef
+    refType: equipment
+    lookup: { name: "Gold Pieces" }
+    quantity: 15
+
+  - origin: homebrew
+    type: treasure
+    name: Warden's Seal
+    price: 25
+    bulk: "-"
+    description: "A bronze seal stamped with the border ward's crest."
+
+  - origin: homebrew
+    type: consumable
+    name: Border Flare
+    level: 2
+    category: other
+    price: 6
+    bulk: L
+    description: "Throw it into the air to light a 20-foot burst for 1 minute."
+    quantity: 3
 
 spellcasting:
   - name: Warden Innate Spells

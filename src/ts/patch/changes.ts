@@ -2,7 +2,7 @@ import CONSTANTS from "../constants";
 import { buildLore, buildNamedSkills, isKnownSkill, type Vocabulary } from "../build/actorData";
 import { computeStrike, type StrikeFlag, type StrikeStats } from "../build/strikeMath";
 import { classifyAttackEffect } from "../parse";
-import { isHomebrewStrike, type AbilityKey, type ActorPatchDoc, type SheetItem } from "../schema";
+import { isHomebrewAction, isHomebrewStrike, type AbilityKey, type ActorPatchDoc, type SheetItem } from "../schema";
 import { sluggify } from "../slug";
 import { fieldGroups, itemFieldUpdate, runeUpdate } from "./itemFields";
 import { LIST_PATHS, loreKey, normalizeOps, type ActorSource, type ListSpec, type PathContext } from "./paths";
@@ -277,7 +277,7 @@ export function buildPatchChanges(doc: ActorPatchDoc, source: ActorSource, vocab
   // --- attack effects must name an action on the patched actor ---------------------
   const actionSlugs = new Set<string>(live().filter((item) => item.type === "action").map((item) => item.system?.slug || sluggify(item.name)));
   for (const item of result.addItems) {
-    if (item.origin === "homebrew" && !isHomebrewStrike(item)) actionSlugs.add(sluggify(item.name));
+    if (isHomebrewAction(item)) actionSlugs.add(sluggify(item.name));
     if (item.origin === "compendiumRef" && item.refType === "action") actionSlugs.add(sluggify(item.lookup.name));
   }
   const checkEffects = (name: string, effects: string[], where: string) => {

@@ -30,10 +30,22 @@ const runes = z.object({
 // items (§3)
 // ---------------------------------------------------------------------------
 
+// inventory state for physical items; true picks held or worn from the item's usage
+const inventory = {
+  quantity: z.number().int().min(1).optional(),
+  equipped: z.union([z.boolean(), z.enum(["held", "worn", "dropped"])]).optional(),
+  hands: z.union([z.literal(1), z.literal(2)]).optional(),
+  invested: z.boolean().optional(),
+};
+
+export const INVENTORY_KEYS = ["quantity", "equipped", "hands", "invested"] as const;
+export type InventoryFields = { [K in (typeof INVENTORY_KEYS)[number]]?: z.infer<(typeof inventory)[K]> };
+
 const compendiumRef = z.object({
   origin: z.literal("compendiumRef"),
   refType: z.enum(["action", "equipment", "spell"]),
   lookup,
+  ...inventory,
 });
 
 const equippedWeapon = z.object({
@@ -44,7 +56,50 @@ const equippedWeapon = z.object({
   abilityOverride: abilityKey.nullable().default(null),
   damageAbilityOverride: abilityKey.nullable().default(null),
   keepInInventory: z.boolean().default(true),
+  ...inventory,
 });
+
+// pf2e bulk: a number, L for light, - for negligible
+const bulk = z.union([z.number().min(0), z.literal("L").transform(() => 0.1), z.literal("-").transform(() => 0)]);
+
+// coins; a bare number is gp
+const price = z.union([
+  z.number().min(0).transform((gp) => ({ gp })),
+  z.object({ pp: z.number().int().min(0), gp: z.number().int().min(0), sp: z.number().int().min(0), cp: z.number().int().min(0) }).partial().strict(),
+]);
+
+export const GEAR_TYPES = ["equipment", "consumable", "treasure", "backpack"] as const;
+
+const CONSUMABLE_CATEGORIES = [
+  "ammo", "catalyst", "drug", "elixir", "fulu", "gadget", "mutagen", "oil", "other",
+  "poison", "potion", "scroll", "snare", "spell-gem", "talisman", "toolkit", "wand",
+] as const;
+
+// homebrew physical items; pf2e item type is the sheet type
+const homebrewGear = z
+  .object({
+    origin: z.literal("homebrew"),
+    type: z.enum(GEAR_TYPES),
+    name: z.string().min(1),
+    level: z.number().int().min(0).max(30).default(0),
+    rarity: z.enum(["common", "uncommon", "rare", "unique"]).default("common"),
+    traits: z.array(z.string()).default([]),
+    price: price.default(0),
+    bulk: bulk.optional(),
+    // pf2e usage slug like held-in-one-hand, worn, wornamulet
+    usage: z.string().min(1).optional(),
+    description: z.string().default(""),
+    category: z.enum(CONSUMABLE_CATEGORIES).optional(),
+    uses: z.number().int().min(1).optional(),
+    capacity: z.number().min(0).optional(),
+    ignored: z.number().min(0).optional(),
+    ...inventory,
+  })
+  .superRefine((item, ctx) => {
+    const issue = (key: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message });
+    if (item.type !== "consumable") for (const key of ["category", "uses"] as const) if (item[key] !== undefined) issue(key, `${key} only applies to consumables`);
+    if (item.type !== "backpack") for (const key of ["capacity", "ignored"] as const) if (item[key] !== undefined) issue(key, `${key} only applies to backpacks`);
+  });
 
 const homebrewAction = z
   .object({
@@ -133,7 +188,31 @@ export type EquippedWeaponItem = z.infer<typeof equippedWeapon>;
 export type HomebrewActionItem = z.infer<typeof homebrewAction>;
 export type HomebrewStrikeItem = z.infer<typeof homebrewStrike>;
 export type HomebrewSpellItem = z.infer<typeof homebrewSpell>;
-export type SheetItem = CompendiumRefItem | EquippedWeaponItem | HomebrewActionItem | HomebrewStrikeItem | HomebrewSpellItem;
+export type HomebrewGearItem = z.infer<typeof homebrewGear>;
+export type SheetItem = CompendiumRefItem | EquippedWeaponItem | HomebrewActionItem | HomebrewStrikeItem | HomebrewSpellItem | HomebrewGearItem;
+
+export function isHomebrewGear(item: SheetItem): item is HomebrewGearItem {
+  return item.origin === "homebrew" && (GEAR_TYPES as readonly string[]).includes(item.type);
+}
+
+// items that land in an inventory and take quantity/equipped
+export function isPhysicalItem(item: SheetItem): boolean {
+  return item.origin === "equippedWeapon" || isHomebrewGear(item) || (item.origin === "compendiumRef" && item.refType === "equipment");
+}
+
+// inventory fields that don't make sense together or on this item
+function checkInventory(item: SheetItem, ctx: z.RefinementCtx): void {
+  const fields = item as InventoryFields;
+  const issue = (key: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message });
+  const set = INVENTORY_KEYS.filter((key) => fields[key] !== undefined);
+  if (!set.length) return;
+  if (!isPhysicalItem(item)) {
+    for (const key of set) issue(key, `${key} only applies to equipment`);
+    return;
+  }
+  if (item.origin === "equippedWeapon" && !item.keepInInventory) for (const key of set) issue(key, `${key} needs keepInInventory: true`);
+  if (fields.hands !== undefined && fields.equipped !== "held" && fields.equipped !== true) issue("hands", "hands needs equipped: held or true");
+}
 
 export function isHomebrewSpell(item: SheetItem): item is HomebrewSpellItem {
   return item.origin === "homebrew" && item.type === "spell";
@@ -156,13 +235,21 @@ export const sheetItem = z
   .discriminatedUnion("origin", [
     compendiumRef,
     equippedWeapon,
-    z.object({ origin: z.literal("homebrew"), type: z.enum(["action", "passive", "melee", "ranged", "spell"]) }).passthrough(),
+    z.object({ origin: z.literal("homebrew"), type: z.enum(["action", "passive", "melee", "ranged", "spell", ...GEAR_TYPES]) }).passthrough(),
   ])
   .transform((value, ctx): SheetItem => {
-    if (value.origin !== "homebrew") return value;
+    if (value.origin !== "homebrew") {
+      checkInventory(value, ctx);
+      return value;
+    }
     const isStrike = value.type === "melee" || value.type === "ranged";
-    const parsed = (value.type === "spell" ? homebrewSpell : isStrike ? homebrewStrike : homebrewAction).safeParse(value);
-    if (parsed.success) return parsed.data;
+    const isGear = (GEAR_TYPES as readonly string[]).includes(value.type);
+    const schema = value.type === "spell" ? homebrewSpell : isStrike ? homebrewStrike : isGear ? homebrewGear : homebrewAction;
+    const parsed = schema.safeParse(value);
+    if (parsed.success) {
+      checkInventory(parsed.data, ctx);
+      return parsed.data;
+    }
     for (const issue of parsed.error.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, path: issue.path, message: issue.message });
     return z.NEVER;
   });

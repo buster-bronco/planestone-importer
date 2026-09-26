@@ -24,7 +24,7 @@ describe("world item parsing", () => {
     const result = parseSheetText(example("items.yaml"));
     expect(result.errors).toEqual([]);
     expect(result.actors).toEqual([]);
-    expect(result.items.map((item) => item.origin)).toEqual(["homebrew", "homebrew", "compendiumRef", "compendiumRef", "homebrew"]);
+    expect(result.items.map((item) => item.origin)).toEqual(["homebrew", "homebrew", "compendiumRef", "compendiumRef", "homebrew", "homebrew", "homebrew"]);
   });
 
   it("accepts a single item with its fields next to kind", () => {

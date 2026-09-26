@@ -12,6 +12,7 @@ import {
   type ActorDoc,
   type ActorPatchDoc,
   type HazardDoc,
+  type InventoryFields,
   type ItemPatchDoc,
   type SheetItem,
   type SpellListDoc,
@@ -149,6 +150,9 @@ function checkWorldItem(item: SheetItem, where: string, result: ParsedSheet): vo
     result.errors.push(`${where}: equippedWeapon makes an npc strike; use compendiumRef with refType: equipment for a world weapon`);
   } else if (isHomebrewStrike(item)) {
     result.errors.push(`${where}: "${item.name}" is a strike; strikes only exist on actors`);
+  }
+  for (const key of ["equipped", "hands", "invested"] as const) {
+    if ((item as InventoryFields)[key] !== undefined) result.errors.push(`${where}.${key}: world items aren't carried by anyone; only quantity applies`);
   }
 }
 

@@ -1,10 +1,11 @@
 import CONSTANTS from "./constants";
 import { buildHomebrewAction, buildHomebrewStrike } from "./build/homebrew";
+import { applyInventory, buildHomebrewGear } from "./build/gearData";
 import { buildHomebrewSpell } from "./build/spellData";
 import { computeStrike, dieFromDamage, type StrikeFlag, type StrikeStats } from "./build/strikeMath";
 import { applyLinkMarks, type LinkTarget } from "./linkMarks";
 import { normalizePackId, type PackIndex } from "./packIndex";
-import { isHomebrewSpell, isHomebrewStrike, type EquippedWeaponItem, type SheetItem, type SpellRef } from "./schema";
+import { isHomebrewGear, isHomebrewSpell, isHomebrewStrike, type EquippedWeaponItem, type SheetItem, type SpellRef } from "./schema";
 import { getGame } from "./utils";
 
 export interface PreparedWeapon {
@@ -45,6 +46,12 @@ export function sheetItemName(item: SheetItem): string {
 }
 
 function homebrewData(item: Extract<SheetItem, { origin: "homebrew" }>, ctx: ItemContext): any {
+  if (isHomebrewGear(item)) {
+    const gear = buildHomebrewGear(item);
+    applyInventory(gear, item, ctx.warn);
+    linkDescription(gear, ctx.targets, ctx.warn);
+    return gear;
+  }
   const data = isHomebrewSpell(item) ? buildHomebrewSpell(item) : isHomebrewStrike(item) ? buildHomebrewStrike(item, ctx.warn) : buildHomebrewAction(item);
   linkDescription(data, ctx.targets, ctx.warn);
   return data;
@@ -77,6 +84,7 @@ export async function resolveItem(item: SheetItem, ctx: ItemContext): Promise<Re
   if (!uuid) return null;
 
   const data = await compendiumItemData(uuid);
+  if (isWeapon || refType === "equipment") applyInventory(data, item, ctx.warn);
   return isWeapon ? { weapon: { item, source: data } } : { data };
 }
 

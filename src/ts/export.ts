@@ -58,12 +58,63 @@ function splitTrigger(html: string): { trigger?: string; description: string } {
   return { trigger: match[1].trim(), description: match[2].replace(/^<p><strong>Effect<\/strong>\s*/, "<p>").trim() };
 }
 
+const PHYSICAL_TYPES = new Set(["weapon", "armor", "shield", "equipment", "consumable", "treasure", "backpack", "ammo"]);
+const GEAR_TYPES = new Set(["equipment", "consumable", "treasure", "backpack"]);
+
+// inverse of applyInventory; carried and unequipped is the default, so it's left out
+function exportInventory(item: any): Record<string, unknown> {
+  const system = item.system ?? {};
+  const equipped = system.equipped ?? {};
+  const out: Record<string, unknown> = {};
+  if (system.quantity !== undefined && system.quantity !== 1) out.quantity = system.quantity;
+  if (equipped.carryType === "held") Object.assign(out, { equipped: "held", hands: equipped.handsHeld || 1 });
+  else if (equipped.carryType === "worn" && equipped.inSlot) out.equipped = "worn";
+  else if (equipped.carryType === "dropped") out.equipped = "dropped";
+  if (equipped.invested) out.invested = true;
+  return out;
+}
+
 function compendiumRef(item: any, uuid: string, sourceName: SourceName) {
   return {
     origin: "compendiumRef",
     refType: REFTYPE_BY_ITEM[item.type],
     lookup: { name: sourceName(uuid) ?? item.name, pack: packOf(uuid) },
+    ...(PHYSICAL_TYPES.has(item.type) ? exportInventory(item) : {}),
   };
+}
+
+// fractional coins read back as a bare gp number when there's no pp
+function exportPrice(value: Record<string, number> = {}): unknown {
+  const { pp = 0, gp = 0, sp = 0, cp = 0 } = value;
+  return pp ? nonEmpty({ pp, gp, sp, cp }) : Math.round((gp + sp / 10 + cp / 100) * 100) / 100;
+}
+
+function exportBulk(value: number | undefined): unknown {
+  return value === 0.1 ? "L" : value === 0 ? "-" : value;
+}
+
+function homebrewGear(item: any) {
+  const system = item.system ?? {};
+  const isConsumable = item.type === "consumable";
+  const isBackpack = item.type === "backpack";
+  const traits: string[] = (system.traits?.value ?? []).filter((trait: string) => !(isConsumable && trait === "consumable"));
+  return nonEmpty({
+    origin: "homebrew",
+    type: item.type,
+    name: item.name,
+    level: system.level?.value || undefined,
+    rarity: system.traits?.rarity === "common" ? undefined : system.traits?.rarity,
+    traits,
+    price: exportPrice(system.price?.value) || undefined,
+    bulk: exportBulk(system.bulk?.value),
+    usage: system.usage?.value,
+    description: system.description?.value,
+    category: isConsumable && system.category !== "other" ? system.category : undefined,
+    uses: isConsumable && system.uses?.max > 1 ? system.uses.max : undefined,
+    capacity: isBackpack ? system.bulk?.capacity : undefined,
+    ignored: isBackpack && system.bulk?.ignored ? system.bulk.ignored : undefined,
+    ...exportInventory(item),
+  });
 }
 
 function homebrewAction(item: any) {
@@ -99,7 +150,7 @@ function homebrewStrike(item: any) {
   });
 }
 
-function equippedWeapon(name: string, flag: StrikeFlag, keepInInventory: boolean) {
+function equippedWeapon(name: string, flag: StrikeFlag, keepInInventory: boolean, item?: any) {
   return {
     origin: "equippedWeapon",
     lookup: { name },
@@ -108,6 +159,7 @@ function equippedWeapon(name: string, flag: StrikeFlag, keepInInventory: boolean
     abilityOverride: flag.abilityOverride,
     damageAbilityOverride: flag.damageAbilityOverride,
     keepInInventory,
+    ...(item ? exportInventory(item) : {}),
   };
 }
 
@@ -117,6 +169,7 @@ function exportSheetItem(item: any, sourceName: SourceName): Record<string, unkn
   if (item.type === "melee") return homebrewStrike(item);
   if (uuid && REFTYPE_BY_ITEM[item.type]) return compendiumRef(item, uuid, sourceName);
   if (item.type === "action") return homebrewAction(item);
+  if (GEAR_TYPES.has(item.type)) return homebrewGear(item);
   return null;
 }
 
@@ -141,7 +194,7 @@ export function exportActor(source: ActorSource & { flags?: any }, sourceName: S
     const flag = item.type === "weapon" ? strikesByWeapon.get(item.name) : undefined;
     if (flag) {
       const uuid = compendiumSource(item);
-      items.push(equippedWeapon((uuid && sourceName(uuid)) ?? item.name, flag, true));
+      items.push(equippedWeapon((uuid && sourceName(uuid)) ?? item.name, flag, true, item));
       weaponsSeen.add(item.name);
       continue;
     }

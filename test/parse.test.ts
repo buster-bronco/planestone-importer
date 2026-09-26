@@ -11,7 +11,7 @@ describe("parseSheetText", () => {
     expect(result.actors).toHaveLength(1);
     const [actor] = result.actors;
     expect(actor.meta.freeArchetype).toBe(false);
-    expect(actor.items).toHaveLength(6);
+    expect(actor.items).toHaveLength(11);
     const bow = actor.items[2];
     expect(bow.origin === "equippedWeapon" && bow.keepInInventory).toBe(false);
   });

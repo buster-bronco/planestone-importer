@@ -115,7 +115,7 @@ core:
 items: [...]
 ```
 
-Only `ac`, `saves.fortitude`, `hp.value`, `meta.name` and `meta.level` are required. Vehicle `items` take homebrew `action`/`passive` entries and `compendiumRef` actions or equipment. Strikes, `equippedWeapon` and spells are errors, because pf2e vehicle sheets have no strikes; write mounted weapons as homebrew actions. Vehicles can't be patched or copied yet.
+Only `ac`, `saves.fortitude`, `hp.value`, `meta.name` and `meta.level` are required. Vehicle `items` take homebrew `action`/`passive` entries, homebrew gear, and `compendiumRef` actions or equipment. Strikes, `equippedWeapon` and spells are errors, because pf2e vehicle sheets have no strikes; write mounted weapons as homebrew actions. Vehicles can't be patched or copied yet.
 
 ### Hazard
 
@@ -143,7 +143,7 @@ core:
 items: [...]
 ```
 
-Only `stealth.mod`, `meta.name` and `meta.level` are required. `[[...]]` link marks work in `description`, `disable`, `routine`, `reset` and `stealth.notes`. Hazard `items` take homebrew actions, passives and `melee`/`ranged` strikes (with the same `attackEffects` rules as NPCs), plus `compendiumRef` actions or equipment. `equippedWeapon` is an error because weapon strike math needs NPC attributes, and so are spells. A `routine` on a hazard that isn't `complex` gives a warning. Hazards can't be patched or copied yet.
+Only `stealth.mod`, `meta.name` and `meta.level` are required. `[[...]]` link marks work in `description`, `disable`, `routine`, `reset` and `stealth.notes`. Hazard `items` take homebrew actions, passives and `melee`/`ranged` strikes (with the same `attackEffects` rules as NPCs), plus homebrew gear and `compendiumRef` actions or equipment. `equippedWeapon` is an error because weapon strike math needs NPC attributes, and so are spells. A `routine` on a hazard that isn't `complex` gives a warning. Hazards can't be patched or copied yet.
 
 ### Items
 
@@ -173,6 +173,7 @@ Without a `pack` hint, the importer searches these packs in order and uses the f
   abilityOverride: null         # any of str/dex/con/int/wis/cha, for the attack roll
   damageAbilityOverride: null   # any attribute, for damage
   keepInInventory: true
+  equipped: held                # inventory fields, see below; need keepInInventory: true
 ```
 
 The weapon is added to the NPC and pf2e's own `toNPCAttacks()` generates the strike. That covers traits, reach, range, thrown/reload, property-rune damage and the weapon link. The importer then replaces the numbers with PC-style math:
@@ -182,7 +183,22 @@ The weapon is added to the NPC and pf2e's own `toNPCAttacks()` generates the str
 
 Weapon specialization isn't added. With `keepInInventory: false` the weapon is removed afterwards, and the strike loses its weapon category and group.
 
-**homebrew**: custom abilities and strikes.
+**Inventory fields**: `compendiumRef` equipment, `equippedWeapon` and homebrew gear also take:
+
+```yaml
+  quantity: 3                   # overrides the compendium's own quantity
+  equipped: true                # true | false | held | worn | dropped
+  hands: 2                      # 1 | 2, with held or true
+  invested: true                # items with the invested trait only
+```
+
+- `equipped: true` works it out from the item. Weapons, shields and items with a `held-in-…` usage are held, in two hands if the usage says two hands. Armor and items with a `worn…` usage are worn in their slot. Anything else gets a warning and stays carried.
+- `held` and `worn` force that carry type. `false` (the default) means carried, not held and not in a slot.
+- `invested` on an item without the invested trait is ignored with a warning.
+- Coins are compendium treasure: `{ origin: compendiumRef, refType: equipment, lookup: { name: Gold Pieces }, quantity: 15 }`.
+- Using these fields on actions, spells or an `equippedWeapon` with `keepInInventory: false` is an error.
+
+**homebrew**: custom abilities, strikes, spells (see [Spellcasting](#spellcasting)) and gear.
 
 ```yaml
 - origin: homebrew
@@ -228,6 +244,24 @@ Weapon specialization isn't added. With `keepInInventory: false` the weapon is r
   description: "…"
 ```
 
+```yaml
+- origin: homebrew
+  type: equipment              # equipment | consumable | treasure | backpack (pf2e item types)
+  name: Wardstone Amulet
+  level: 3                     # item level, default 0
+  rarity: uncommon
+  traits: [invested, magical]
+  price: 60                    # gp, fractions allowed (0.5 = 5 sp); or { pp, gp, sp, cp }
+  bulk: L                      # number, L or -; defaults to L (treasure: -)
+  usage: wornamulet            # pf2e usage slug; defaults to held-in-one-hand (backpack: worn, treasure: none)
+  description: "…"
+  category: potion             # consumables: ammo, elixir, oil, poison, potion, scroll, talisman, wand, … (default other)
+  uses: 1                      # consumables: charges, default 1
+  capacity: 4                  # backpacks: bulk it holds, default 10
+  ignored: 2                   # backpacks: bulk ignored, default 0
+  quantity: 1                  # plus the inventory fields above
+```
+
 Homebrew spells go in a `spellcasting` list or in world items (`item`/`itemBatch`). An actor's `items` rejects them.
 
 `attackEffects` entries must be slugs of action items on the same actor. The one exception is pf2e's built-in effects (`grab`, `improved-grab`, `constrict`, `greater-constrict`, `knockdown`, `improved-knockdown`, `push`, `improved-push`, `trip`): they only produce a warning when the actor has no matching item.
@@ -264,7 +298,8 @@ items:
   - { origin: compendiumRef, refType: spell, lookup: { name: Daze } }
 ```
 
-- homebrew `action`/`passive`/`spell` and `compendiumRef` of any `refType` work. Spells import as plain world spells, with no spellcasting entry needed.
+- homebrew `action`/`passive`/`spell`, homebrew gear and `compendiumRef` of any `refType` work. Spells import as plain world spells, with no spellcasting entry needed.
+- `quantity` works on world items. `equipped`, `hands` and `invested` are errors, because nobody is carrying the item.
 - homebrew `melee`/`ranged` strikes and `equippedWeapon` are errors because strikes only exist on actors. For a plain world weapon, use `compendiumRef` with `refType: equipment`.
 - `[[...]]` link marks work the same as on actors.
 
@@ -379,10 +414,10 @@ The preview lists every change before anything is written. If applying a patch f
 
 **Copy sheet** in the Patch dialog copies the NPC's or item's current state to the clipboard as a Planestone sheet (`kind: actor` or `kind: item`). You can use it as a reference while writing a patch, or re-import it as a copy.
 
-- Compendium items become `compendiumRef` entries that use the compendium entry's name and pack. Imported weapon strikes are grouped back into `equippedWeapon` entries.
-- Actions and strikes with no compendium source become `homebrew` entries. A reaction's trigger is split back out of its description.
+- Compendium items become `compendiumRef` entries that use the compendium entry's name and pack. Imported weapon strikes are grouped back into `equippedWeapon` entries. Physical items keep their `quantity` (when it isn't 1) and carry state (`equipped: held` with `hands`, `worn`, `dropped`, `invested`).
+- Actions, strikes, and equipment/consumable/treasure/backpack items with no compendium source become `homebrew` entries. A reaction's trigger is split back out of its description.
 - Descriptions are exported as stored HTML, so resolved links stay as `@UUID[...]` and don't turn back into `[[...]]` marks.
-- Items with no sheet form, like NPC spells, effects or hand-made loot, are listed as `# not exported:` comments at the top.
+- Items with no sheet form, like NPC spells, effects, or hand-made weapons and armor, are listed as `# not exported:` comments at the top.
 
 ### Item patches (`itemPatch`)
 
