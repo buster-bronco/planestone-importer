@@ -154,7 +154,7 @@ Only `stealth.mod`, `meta.name` and `meta.level` are required. `[[...]]` link ma
   lookup: { name: "Reactive Strike", pack: "actionspf2e" }   # pack optional
 ```
 
-Without a `pack` hint, the importer searches these packs in order and uses the first exact match (case-insensitive). If several items match, you get a warning.
+Without a `pack` hint, the importer searches these packs in order and uses the first exact match (case-insensitive). If several items match, you get a warning. If nothing matches, or the `pack` hint names a pack that doesn't exist, that item is skipped with a warning and the rest of the sheet still imports.
 
 | refType | packs |
 |---|---|
@@ -351,4 +351,4 @@ Renaming an action changes its slug too. Renaming a compendium item (weapon, spe
 
 ## Batch behaviour
 
-The whole file is validated first. If anything is invalid, nothing is created. Once validation passes, each actor is created on its own. If one fails partway through (for example while generating a weapon strike), it's deleted and reported, and the others still import.
+The whole file is validated first. If anything is invalid (bad fields, missing required values, broken `attackEffects`), nothing is created. Compendium lookups are the exception: a `compendiumRef` or `equippedWeapon` that doesn't resolve is skipped with a warning, and its actor imports without it. World items work the same way. Once validation passes, each actor is created on its own. If one fails partway through (for example while generating a weapon strike), it's deleted and reported, and the others still import.

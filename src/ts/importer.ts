@@ -17,7 +17,6 @@ export interface PreparedActor {
   items: any[];
   weapons: PreparedWeapon[];
   warnings: string[];
-  errors: string[];
 }
 
 // vehicles and hazards: system data plus plain items, no weapon strikes
@@ -26,7 +25,6 @@ export interface PreparedSimpleActor<Doc> {
   system: Record<string, unknown>;
   items: any[];
   warnings: string[];
-  errors: string[];
 }
 
 export type PreparedVehicle = PreparedSimpleActor<VehicleDoc>;
@@ -54,6 +52,11 @@ export interface ImportResult {
   error?: string;
 }
 
+// a failed item lookup drops that item with a warning; the rest of the sheet still imports
+function skipItem(warnings: string[], name: string) {
+  return (message: string) => warnings.push(`${name}: ${message}; item skipped`);
+}
+
 export function vocabulary(): Vocabulary {
   const pf2e = CONFIG.PF2E ?? {};
   const keys = (record: unknown) => (record && typeof record === "object" ? new Set(Object.keys(record)) : undefined);
@@ -69,10 +72,10 @@ export function vocabulary(): Vocabulary {
 
 async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string, LinkTarget>, vocab: Vocabulary): Promise<PreparedActor> {
   const { system, loreItems, warnings } = buildActorSystem(doc, vocab);
-  const prepared: PreparedActor = { doc, system, items: [...loreItems], weapons: [], warnings, errors: [] };
+  const prepared: PreparedActor = { doc, system, items: [...loreItems], weapons: [], warnings };
   const name = doc.meta.name;
   const warn = (message: string) => prepared.warnings.push(`${name}: ${message}`);
-  const fail = (message: string) => prepared.errors.push(`${name}: ${message}`);
+  const fail = skipItem(prepared.warnings, name);
 
   for (const item of doc.items) {
     const resolved = await resolveItem(item, { index, targets, warn, fail });
@@ -90,10 +93,10 @@ async function prepareSimpleActor<Doc extends VehicleDoc | HazardDoc>(
   index: PackIndex,
   targets: Map<string, LinkTarget>,
 ): Promise<PreparedSimpleActor<Doc>> {
-  const prepared: PreparedSimpleActor<Doc> = { doc, system: build.system, items: [], warnings: build.warnings, errors: [] };
+  const prepared: PreparedSimpleActor<Doc> = { doc, system: build.system, items: [], warnings: build.warnings };
   const name = doc.meta.name;
   const warn = (message: string) => prepared.warnings.push(`${name}: ${message}`);
-  const fail = (message: string) => prepared.errors.push(`${name}: ${message}`);
+  const fail = skipItem(prepared.warnings, name);
 
   // parse.ts already rejects weapon strikes and spells here
   for (const item of doc.items) {
@@ -127,26 +130,23 @@ export async function prepareImport(text: string): Promise<ImportPlan> {
   for (const doc of parsed.actors) {
     const prepared = await prepareActor(doc, index, targets, vocab);
     plan.actors.push(prepared);
-    plan.errors.push(...prepared.errors);
     plan.warnings.push(...prepared.warnings);
   }
   for (const doc of parsed.vehicles) {
     const prepared = await prepareSimpleActor(doc, buildVehicleSystem(doc, vocab), index, targets);
     plan.vehicles.push(prepared);
-    plan.errors.push(...prepared.errors);
     plan.warnings.push(...prepared.warnings);
   }
   for (const doc of parsed.hazards) {
     const prepared = await prepareSimpleActor(doc, buildHazardSystem(doc, vocab), index, targets);
     linkHazardText(prepared, targets);
     plan.hazards.push(prepared);
-    plan.errors.push(...prepared.errors);
     plan.warnings.push(...prepared.warnings);
   }
   for (const doc of parsed.items) {
     const name = sheetItemName(doc);
     const warn = (message: string) => plan.warnings.push(`${name}: ${message}`);
-    const fail = (message: string) => plan.errors.push(`${name}: ${message}`);
+    const fail = skipItem(plan.warnings, name);
     const resolved = await resolveItem(doc, { index, targets, warn, fail, spells: true });
     if (resolved && "data" in resolved) plan.items.push({ doc, data: resolved.data });
   }
