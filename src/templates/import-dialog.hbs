@@ -37,6 +37,17 @@
         </table>
       {{/if}}
 
+      {{#if items.length}}
+        <table class="actors">
+          <thead><tr><th>{{localize "planestone-importer.dialog.name"}}</th><th>{{localize "planestone-importer.dialog.type"}}</th></tr></thead>
+          <tbody>
+            {{#each items}}
+              <tr><td>{{name}}</td><td>{{type}}</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      {{/if}}
+
       {{#if warnings.length}}
         <div class="messages warnings">
           <h4>{{localize "planestone-importer.dialog.warnings"}}</h4>
@@ -45,13 +56,25 @@
       {{/if}}
     </div>
 
-    <div class="form-group folder-pick">
-      <label for="planestone-importer-folder">{{localize "planestone-importer.dialog.folder"}}</label>
-      <select id="planestone-importer-folder" name="folder">
-        <option value="">{{localize "planestone-importer.dialog.rootFolder"}}</option>
-        {{#each folders}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
-      </select>
-    </div>
+    {{#if actors.length}}
+      <div class="form-group folder-pick">
+        <label for="planestone-importer-folder">{{localize "planestone-importer.dialog.folder"}}</label>
+        <select id="planestone-importer-folder" name="folder">
+          <option value="">{{localize "planestone-importer.dialog.rootFolder"}}</option>
+          {{#each folders}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+        </select>
+      </div>
+    {{/if}}
+
+    {{#if items.length}}
+      <div class="form-group folder-pick">
+        <label for="planestone-importer-item-folder">{{localize "planestone-importer.dialog.itemFolder"}}</label>
+        <select id="planestone-importer-item-folder" name="itemFolder">
+          <option value="">{{localize "planestone-importer.dialog.itemRootFolder"}}</option>
+          {{#each itemFolders}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+        </select>
+      </div>
+    {{/if}}
 
     <footer class="buttons">
       <button type="button" data-action="reset"><i class="fa-solid fa-rotate-left"></i> {{localize "planestone-importer.dialog.back"}}</button>

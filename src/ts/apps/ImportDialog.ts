@@ -1,5 +1,5 @@
 import CONSTANTS from "../constants";
-import { actorFolderOptions, executeImport, prepareImport, type ImportPlan, type ImportResult } from "../importer";
+import { executeImport, folderOptions, prepareImport, type ImportPlan, type ImportResult } from "../importer";
 import { localize } from "../utils";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -31,15 +31,17 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
   private busy = false;
   // pasted text survives re-renders and going back
   private pasted = "";
-  // empty string is the actors root
+  // empty string is the sidebar root
   private folderId = "";
+  private itemFolderId = "";
   // folder document hooks, registered while the dialog is open
   private folderHooks: [string, number][] = [];
 
   async _prepareContext() {
     const plan = this.plan;
     return {
-      folders: actorFolderOptions().map((folder) => ({ ...folder, selected: folder.id === this.folderId })),
+      folders: folderOptions("Actor").map((folder) => ({ ...folder, selected: folder.id === this.folderId })),
+      itemFolders: folderOptions("Item").map((folder) => ({ ...folder, selected: folder.id === this.itemFolderId })),
       stage: this.stage,
       isPick: this.stage === "pick",
       isPreview: this.stage === "preview",
@@ -49,22 +51,24 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       pasted: this.pasted,
       errors: plan?.errors ?? [],
       warnings: plan?.warnings ?? [],
-      canImport: !!plan && !plan.errors.length && plan.actors.length > 0 && !this.busy,
+      canImport: !!plan && !plan.errors.length && plan.actors.length + plan.items.length > 0 && !this.busy,
       actors: (plan?.actors ?? []).map((actor) => ({
         name: actor.doc.meta.name,
         level: actor.doc.meta.level,
         itemCount: actor.items.length + actor.weapons.length,
         weaponCount: actor.weapons.length,
       })),
+      items: (plan?.items ?? []).map((item) => ({ name: item.data.name, type: item.data.type })),
       results: await Promise.all(this.results.map(async (result) => ({ ...result, link: await this.resultLink(result) }))),
     };
   }
 
   // document.toAnchor() renders foundry's own content-link markup
   private async resultLink(result: ImportResult): Promise<string | null> {
-    if (!result.actorUuid) return null;
-    const actor = await fromUuid(result.actorUuid);
-    return actor ? actor.toAnchor().outerHTML : result.name;
+    const uuid = result.actorUuid ?? result.itemUuid;
+    if (!uuid) return null;
+    const document = await fromUuid(uuid);
+    return document ? document.toAnchor().outerHTML : result.name;
   }
 
   async _onRender(context: unknown, options: unknown) {
@@ -78,12 +82,14 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     textarea?.addEventListener("input", () => (this.pasted = textarea.value));
     const folderSelect = this.element.querySelector("select[name=folder]") as HTMLSelectElement | null;
     folderSelect?.addEventListener("change", () => (this.folderId = folderSelect.value));
+    const itemFolderSelect = this.element.querySelector("select[name=itemFolder]") as HTMLSelectElement | null;
+    itemFolderSelect?.addEventListener("change", () => (this.itemFolderId = itemFolderSelect.value));
   }
 
   async _onFirstRender(context: unknown, options: unknown) {
     await super._onFirstRender(context, options);
     const refresh = (folder: any) => {
-      if (folder.type === "Actor") this.refreshFolderSelect();
+      if (folder.type === "Actor" || folder.type === "Item") this.refreshFolderSelects();
     };
     this.folderHooks = ["createFolder", "updateFolder", "deleteFolder"].map((hook) => [hook, Hooks.on(hook, refresh)]);
   }
@@ -94,16 +100,22 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     this.folderHooks = [];
   }
 
-  // rebuilds the dropdown in place; a deleted selection falls back to root
-  private refreshFolderSelect() {
-    const folders = actorFolderOptions();
-    if (this.folderId && !folders.some((folder) => folder.id === this.folderId)) this.folderId = "";
+  // rebuilds the dropdowns in place; a deleted selection falls back to root
+  private refreshFolderSelects() {
+    this.folderId = this.refreshFolderSelect("folder", "Actor", this.folderId);
+    this.itemFolderId = this.refreshFolderSelect("itemFolder", "Item", this.itemFolderId);
+  }
 
-    const select = this.element?.querySelector("select[name=folder]") as HTMLSelectElement | null;
-    if (!select) return;
+  private refreshFolderSelect(name: string, type: "Actor" | "Item", selected: string): string {
+    const folders = folderOptions(type);
+    if (selected && !folders.some((folder) => folder.id === selected)) selected = "";
+
+    const select = this.element?.querySelector(`select[name=${name}]`) as HTMLSelectElement | null;
+    if (!select) return selected;
     const root = select.options[0];
     select.replaceChildren(root, ...folders.map((folder) => new Option(folder.label, folder.id)));
-    select.value = this.folderId;
+    select.value = selected;
+    return selected;
   }
 
   private async loadFile(file: File) {
@@ -118,7 +130,7 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       this.plan = await prepareImport(await read());
     } catch (err) {
       console.error(CONSTANTS.DEBUG_PREFIX, err);
-      this.plan = { actors: [], errors: [(err as Error).message], warnings: [] };
+      this.plan = { actors: [], items: [], errors: [(err as Error).message], warnings: [] };
     }
     this.busy = false;
     this.stage = "preview";
@@ -129,11 +141,11 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     if (!this.plan || this.busy) return;
     this.busy = true;
     await this.render();
-    this.results = await executeImport(this.plan, { folderId: this.folderId || null });
+    this.results = await executeImport(this.plan, { folderId: this.folderId || null, itemFolderId: this.itemFolderId || null });
     this.busy = false;
     this.stage = "results";
     const created = this.results.filter((result) => result.ok).length;
-    ui.notifications.info(`${localize("notify.created")}: ${created}/${this.results.length}`);
+    ui.notifications.info(`${localize("notify.imported")}: ${created}/${this.results.length}`);
     await this.render();
   }
 

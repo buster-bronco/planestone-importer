@@ -24,10 +24,10 @@ export interface PatchPlan {
 }
 
 // an optional target guards against pasting a patch onto the wrong sheet
-function targetMismatch(doc: ActorPatchDoc, actor: any): string | null {
-  const { name, uuid } = doc.target ?? {};
-  if (uuid && uuid !== actor.uuid) return `patch targets ${uuid}, but this sheet is ${actor.uuid}`;
-  if (name && name.trim().toLowerCase() !== actor.name.trim().toLowerCase()) return `patch targets "${name}", but this sheet is "${actor.name}"`;
+export function targetMismatch(target: ActorPatchDoc["target"], document: any): string | null {
+  const { name, uuid } = target ?? {};
+  if (uuid && uuid !== document.uuid) return `patch targets ${uuid}, but this sheet is ${document.uuid}`;
+  if (name && name.trim().toLowerCase() !== document.name.trim().toLowerCase()) return `patch targets "${name}", but this sheet is "${document.name}"`;
   return null;
 }
 
@@ -53,7 +53,7 @@ export async function preparePatch(
   const warn = (message: string) => prepared.warnings.push(message);
   const fail = (message: string) => prepared.errors.push(message);
 
-  const mismatch = targetMismatch(doc, actor);
+  const mismatch = targetMismatch(doc.target, actor);
   if (mismatch) fail(mismatch);
 
   // [[term]] marks in edited descriptions
@@ -78,7 +78,7 @@ export async function preparePatchText(actor: any, text: string, vocab: Vocabula
   const parsed = parseSheetText(text);
   const plan: PatchPlan = { patch: null, errors: [...parsed.errors], warnings: [...parsed.warnings] };
   if (plan.errors.length) return plan;
-  if (parsed.patches.length !== 1 || parsed.actors.length || parsed.spellLists.length) {
+  if (parsed.patches.length !== 1 || parsed.itemPatches.length || parsed.actors.length || parsed.items.length || parsed.spellLists.length) {
     plan.errors.push("expected a single kind: actorPatch document");
     return plan;
   }

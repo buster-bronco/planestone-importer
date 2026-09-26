@@ -1,7 +1,17 @@
 import yaml from "js-yaml";
 import type { ZodIssue } from "zod";
 import { normalizeOps } from "./patch/paths";
-import { isHomebrewAction, isHomebrewStrike, sheetFile, type ActorDoc, type ActorPatchDoc, type SpellListDoc } from "./schema";
+import {
+  isHomebrewAction,
+  isHomebrewStrike,
+  sheetFile,
+  sheetItem,
+  type ActorDoc,
+  type ActorPatchDoc,
+  type ItemPatchDoc,
+  type SheetItem,
+  type SpellListDoc,
+} from "./schema";
 import { sluggify } from "./slug";
 
 // attack effects pf2e knows without a matching action item (CONFIG.PF2E.attackEffects)
@@ -20,6 +30,9 @@ export const BUILTIN_ATTACK_EFFECTS = new Set([
 export interface ParsedSheet {
   actors: ActorDoc[];
   patches: ActorPatchDoc[];
+  // world items, not attached to an actor
+  items: SheetItem[];
+  itemPatches: ItemPatchDoc[];
   spellLists: SpellListDoc[];
   errors: string[];
   warnings: string[];
@@ -32,7 +45,7 @@ function formatIssue(issue: ZodIssue): string {
 
 // yaml is a superset of json, so one loader covers both
 export function parseSheetText(text: string): ParsedSheet {
-  const result: ParsedSheet = { actors: [], patches: [], spellLists: [], errors: [], warnings: [] };
+  const result: ParsedSheet = { actors: [], patches: [], items: [], itemPatches: [], spellLists: [], errors: [], warnings: [] };
 
   let raw: unknown;
   try {
@@ -52,7 +65,17 @@ export function parseSheetText(text: string): ParsedSheet {
   if (doc.kind === "actor") result.actors.push(doc);
   else if (doc.kind === "spellList") result.spellLists.push(doc);
   else if (doc.kind === "actorPatch") result.patches.push(doc);
-  else {
+  else if (doc.kind === "itemPatch") result.itemPatches.push(doc);
+  else if (doc.kind === "itemBatch") result.items.push(...doc.items);
+  else if (doc.kind === "item") {
+    const { schemaVersion: _version, kind: _kind, ...fields } = doc;
+    const item = sheetItem.safeParse(fields);
+    if (!item.success) {
+      result.errors.push(...item.error.issues.map(formatIssue));
+      return result;
+    }
+    result.items.push(item.data);
+  } else {
     result.actors.push(...doc.actors);
     result.spellLists.push(...doc.spellLists);
   }
@@ -63,6 +86,7 @@ export function parseSheetText(text: string): ParsedSheet {
 
   for (const actor of result.actors) checkActor(actor, result);
   for (const patch of result.patches) checkPatch(patch, result);
+  result.items.forEach((item, index) => checkWorldItem(item, doc.kind === "itemBatch" ? `items.${index}` : "(root)", result));
   return result;
 }
 
@@ -74,6 +98,15 @@ export function patchLabel(patch: ActorPatchDoc): string {
 function checkPatch(patch: ActorPatchDoc, result: ParsedSheet): void {
   const label = patchLabel(patch);
   for (const error of normalizeOps(patch).errors) result.errors.push(`patch ${label}: ${error}`);
+}
+
+// strikes and weapon strikes only mean something on an npc
+function checkWorldItem(item: SheetItem, where: string, result: ParsedSheet): void {
+  if (item.origin === "equippedWeapon") {
+    result.errors.push(`${where}: equippedWeapon makes an npc strike; use compendiumRef with refType: equipment for a world weapon`);
+  } else if (isHomebrewStrike(item)) {
+    result.errors.push(`${where}: "${item.name}" is a strike; strikes only exist on actors`);
+  }
 }
 
 // ok: an action on the actor; builtin: pf2e knows it without one; unknown: neither

@@ -16,6 +16,8 @@ export interface ItemContext {
   targets: Map<string, LinkTarget>;
   warn: (message: string) => void;
   fail: (message: string) => void;
+  // world items can hold spells; npcs need a spellcasting entry first
+  spells?: boolean;
 }
 
 export type ResolvedItem = { data: any } | { weapon: PreparedWeapon } | null;
@@ -54,7 +56,7 @@ export async function resolveItem(item: SheetItem, ctx: ItemContext): Promise<Re
 
   const isWeapon = item.origin === "equippedWeapon";
   const refType = isWeapon ? "equipment" : item.refType;
-  if (refType === "spell") {
+  if (refType === "spell" && !ctx.spells) {
     warn(`spell "${item.lookup.name}" skipped; spells need a spellcasting entry`);
     return null;
   }
@@ -65,7 +67,7 @@ export async function resolveItem(item: SheetItem, ctx: ItemContext): Promise<Re
     return null;
   }
 
-  const hit = await index.find(packs, item.lookup.name, isWeapon ? ["weapon"] : refType === "action" ? ["action"] : undefined);
+  const hit = await index.find(packs, item.lookup.name, isWeapon ? ["weapon"] : refType === "equipment" ? undefined : [refType]);
   if (!hit) {
     fail(`no ${isWeapon ? "weapon" : refType} named "${item.lookup.name}" in ${packs.join(", ")}`);
     return null;

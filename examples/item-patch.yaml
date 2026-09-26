@@ -1,0 +1,10 @@
+# widens hold the line from items.yaml
+# apply from the item's sheet: header → Patch
+schemaVersion: 1
+kind: itemPatch
+target: { name: Hold the Line }   # optional; refuses to apply to a different sheet
+
+set:
+  trigger: "An ally within 15 feet is hit by a melee attack."
+  description: "The ally gains resistance 5 to the triggering damage and the attacker is [[off-guard]]."
+  traits: [flourish]

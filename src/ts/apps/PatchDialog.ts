@@ -1,6 +1,7 @@
 import CONSTANTS from "../constants";
 import { vocabulary } from "../importer";
 import { executePatch, type PatchResult } from "../patch/apply";
+import { executeItemPatch, prepareItemPatchText, type ItemPatchPlan, type ItemPatchResult } from "../patch/item";
 import { preparePatchText, type PatchPlan } from "../patch/prepare";
 import { localize } from "../utils";
 
@@ -8,7 +9,7 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 type Stage = "edit" | "preview" | "done";
 
-// one dialog per npc, opened from its sheet header
+// one dialog per npc or world item, opened from its sheet header
 export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     classes: [`${CONSTANTS.MODULE_ID}`],
@@ -28,17 +29,27 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
 
   private stage: Stage = "edit";
   private text = "";
-  private plan: PatchPlan | null = null;
-  private result: PatchResult | null = null;
+  private plan: PatchPlan | ItemPatchPlan | null = null;
+  private result: PatchResult | ItemPatchResult | null = null;
   private busy = false;
 
-  constructor(private actor: any, options: Record<string, unknown> = {}) {
-    super({ id: `${CONSTANTS.MODULE_ID}-patch-${actor.id}`, ...options });
+  constructor(private document: any, options: Record<string, unknown> = {}) {
+    super({ id: PatchDialog.idFor(document), ...options });
+  }
+
+  // actors and items can share an id, so the document type is part of it
+  static idFor(document: any): string {
+    return `${CONSTANTS.MODULE_ID}-patch-${document.documentName.toLowerCase()}-${document.id}`;
+  }
+
+  private get isItem(): boolean {
+    return this.document.documentName === "Item";
   }
 
   get title() {
-    return `${localize("patch.title")}: ${this.actor.name}`;
+    return `${localize(this.isItem ? "patch.itemTitle" : "patch.title")}: ${this.document.name}`;
   }
+
 
   async _prepareContext() {
     const plan = this.plan;
@@ -48,6 +59,8 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
       isDone: this.stage === "done",
       busy: this.busy,
       text: this.text,
+      hint: localize(this.isItem ? "patch.itemHint" : "patch.hint"),
+      placeholder: this.isItem ? "schemaVersion: 1\nkind: itemPatch\nset:\n  traits: [concentrate]" : "schemaVersion: 1\nkind: actorPatch\nset:\n  core.ac: 23",
       errors: plan?.errors ?? [],
       warnings: plan?.warnings ?? [],
       changes: plan?.patch?.changes.changes ?? [],
@@ -74,7 +87,9 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
     this.busy = true;
     await this.render();
     try {
-      this.plan = await preparePatchText(this.actor, this.text, vocabulary());
+      this.plan = this.isItem
+        ? await prepareItemPatchText(this.document, this.text)
+        : await preparePatchText(this.document, this.text, vocabulary());
     } catch (err) {
       console.error(CONSTANTS.DEBUG_PREFIX, err);
       this.plan = { patch: null, errors: [(err as Error).message], warnings: [] };
@@ -89,10 +104,10 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
     if (!patch || this.busy || this.plan?.errors.length) return;
     this.busy = true;
     await this.render();
-    this.result = await executePatch(patch);
+    this.result = "item" in patch ? await executeItemPatch(patch) : await executePatch(patch);
     this.busy = false;
     this.stage = "done";
-    if (this.result.ok) ui.notifications.info(`${localize("notify.patched")}: ${this.actor.name}`);
+    if (this.result.ok) ui.notifications.info(`${localize(this.isItem ? "notify.itemPatched" : "notify.patched")}: ${this.document.name}`);
     else ui.notifications.error(`${localize("notify.patchFailed")}: ${this.result.error}`);
     await this.render();
   }

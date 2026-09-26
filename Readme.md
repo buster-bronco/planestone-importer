@@ -1,9 +1,9 @@
 # Planestone Importer
 
-A Foundry VTT module that imports **Planestone sheet** files (YAML or JSON) as pf2e NPC actors. Built for my own game.
+A Foundry VTT module that imports **Planestone sheet** files (YAML or JSON) as pf2e NPC actors and world items. Built for my own game.
 
 - Foundry **v13–v14**, pf2e **7.2.x**
-- GM-only **Import Sheet** button in the Actors sidebar
+- GM-only **Import Sheet** button in the Actors and Items sidebars
 - Preview before anything is created: errors block the import, warnings don't
 
 ## Development
@@ -29,31 +29,32 @@ Releases work like emotive-hud: publishing a GitHub release runs `.github/workfl
 ## Usage
 
 1. Enable the module in a pf2e world.
-2. Actors sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file, or paste a sheet and hit **Load text**.
-3. Check the preview (actors, item counts, warnings), pick a destination folder (defaults to the Actors root) → **Import**.
-4. To change an existing NPC later, use **Patch** in its sheet header (see [Patches](#patches-actorpatch)).
+2. Actors or Items sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file, or paste a sheet and hit **Load text**. Both buttons open the same dialog, and it accepts NPCs and world items.
+3. Check the preview (actors, item counts, world items, warnings), pick destination folders (they default to the sidebar roots) → **Import**.
+4. To change an existing NPC or world item later, use **Patch** in its sheet header (see [Patches](#patches-actorpatch) and [Item patches](#item-patches-itempatch)).
 
-Each imported actor is flagged with `flags.planestone-importer.{schemaVersion, source, freeArchetype}`.
+Each imported actor is flagged with `flags.planestone-importer.{schemaVersion, source, freeArchetype}`, and each world item with `flags.planestone-importer.schemaVersion`.
 
 Macro API:
 
 ```js
 const api = game.modules.get("planestone-importer").api;
 api.openDialog();
-const { plan, results } = await api.importText(yamlString, { folderId: null }); // folderId optional, null = root
-api.openPatchDialog(actor);
+const { plan, results } = await api.importText(yamlString, { folderId: null, itemFolderId: null }); // folders optional, null = root
+api.openPatchDialog(actorOrItem);
 const { plan, result } = await api.applyPatch(actor, patchYaml); // actor document or uuid
+const { plan, result } = await api.applyItemPatch(item, itemPatchYaml); // world item document or uuid
 ```
 
 ## Planestone sheet format (v1)
 
-See [`examples/`](examples) for complete files: `actor.yaml`, `batch.yaml` and `broken.yaml` (every validation error on purpose).
+See [`examples/`](examples) for complete files: `actor.yaml`, `batch.yaml`, `items.yaml`, `patch.yaml`, `item-patch.yaml` and `broken.yaml` (every validation error on purpose).
 
 ### Envelope
 
 ```yaml
 schemaVersion: 1
-kind: actor | spellList | actorBatch
+kind: actor | spellList | actorBatch | item | itemBatch | actorPatch | itemPatch
 ```
 
 `actorBatch` holds `actors: [...]` and `spellLists: [...]`. Actors inside a batch don't need `schemaVersion`/`kind`.
@@ -155,6 +156,34 @@ Mark a term with `[[...]]` to link it:
 
 Marks are looked up in `conditionitems`, then `actionspf2e`, and become `@UUID[...]{Stupefied 1}`. Unknown terms are left as plain text with a warning. Foundry inline rolls are left alone: `[[/r 1d6]]`, `[[/gmr …]]`, `[[2d6]]`, and any mark followed by `{label}`. Unmarked text is never linked.
 
+### World items (`item`, `itemBatch`)
+
+World items land in the Items sidebar instead of on an NPC. They use the same item entries as an actor's `items`, with a few limits:
+
+```yaml
+schemaVersion: 1
+kind: item                  # one item, fields next to kind
+origin: homebrew
+type: action
+name: Brace
+actionType: 1
+```
+
+```yaml
+schemaVersion: 1
+kind: itemBatch
+items:
+  - { origin: homebrew, type: passive, name: Border Sense }
+  - { origin: compendiumRef, refType: equipment, lookup: { name: Longsword } }
+  - { origin: compendiumRef, refType: spell, lookup: { name: Daze } }
+```
+
+- homebrew `action`/`passive` and `compendiumRef` of any `refType` work. Spells are imported too, since a world spell doesn't need a spellcasting entry.
+- homebrew `melee`/`ranged` strikes and `equippedWeapon` are errors because strikes only exist on actors. For a plain world weapon, use `compendiumRef` with `refType: equipment`.
+- `[[...]]` link marks work the same as on actors.
+
+A file holds either actors or items, not both, because each envelope `kind` holds one or the other. Each item is created on its own, so one failure doesn't stop the rest.
+
 ### Spell lists (reserved)
 
 ```yaml
@@ -228,6 +257,29 @@ When `add` rewrites an IWR list, entries you didn't name keep any extra fields, 
 Weapon strikes carry `flags.planestone-importer.strike`. When a patch changes the level or an attribute, those strikes are recalculated with the PC-style math. Homebrew and hand-made strikes keep their numbers, and you get a warning. Strikes imported before this feature don't have the flag, so re-import the actor to get recalculation.
 
 The preview lists every change before anything is written. If applying a patch fails partway, the actor is restored from a snapshot.
+
+### Item patches (`itemPatch`)
+
+An item patch changes one world item. Open the item's sheet and click **Patch** in the header (GM only, world items only; items on an actor are patched through the actor's `items.update`). See [`examples/item-patch.yaml`](examples/item-patch.yaml).
+
+```yaml
+schemaVersion: 1
+kind: itemPatch
+target: { name: Hold the Line }   # optional safety check, name or uuid
+set:
+  trigger: "An ally within 15 feet is hit."
+  description: "…"
+  traits: [flourish]
+```
+
+`set` takes the same fields as an actor patch's `items.update.set`, checked against the item's type:
+
+- any item: `name`, `description`, `traits`
+- actions: `actionType`, `category`, `trigger` (needs `description` in the same `set`)
+- weapons: `runes`
+- `proficiency`, `abilityOverride` and `damageAbilityOverride` only affect NPC strikes, so they're errors here
+
+Renaming an action changes its slug too. Renaming a compendium item (weapon, spell, equipment) keeps its slug so rule elements that point at it keep working. The whole patch is a single `item.update()`, so a failure leaves the item unchanged.
 
 ## Batch behaviour
 

@@ -91,7 +91,7 @@ export function isHomebrewAction(item: SheetItem): item is HomebrewActionItem {
 }
 
 // homebrew splits on "type" too, so it's parsed in a second step
-const item = z
+export const sheetItem = z
   .discriminatedUnion("origin", [
     compendiumRef,
     equippedWeapon,
@@ -171,7 +171,7 @@ export const metaSchema = z.object({
 const actorBody = z.object({
   meta: metaSchema,
   core: coreSchema,
-  items: z.array(item).default([]),
+  items: z.array(sheetItem).default([]),
   // spellcasting is reserved for a later version
   spellcasting: z.unknown().optional(),
 });
@@ -219,16 +219,28 @@ const actorPatchBody = z.object({
   remove: z.record(z.string(), z.array(z.string().min(1))).default({}),
   items: z
     .object({
-      add: z.array(item).default([]),
+      add: z.array(sheetItem).default([]),
       remove: z.array(z.string().min(1)).default([]),
       update: z.array(z.object({ match: z.string().min(1), set: itemPatchFields })).default([]),
-      replace: z.array(z.object({ match: z.string().min(1), with: item })).default([]),
+      replace: z.array(z.object({ match: z.string().min(1), with: sheetItem })).default([]),
     })
     .strict()
     .default({}),
 });
 
 export type ActorPatchDoc = z.infer<typeof actorPatchBody>;
+
+// ---------------------------------------------------------------------------
+// item patch (§7)
+// ---------------------------------------------------------------------------
+
+// patches one world item; target works like actorPatch's
+const itemPatchBody = z.object({
+  target: patchTarget.optional(),
+  set: itemPatchFields,
+});
+
+export type ItemPatchDoc = z.infer<typeof itemPatchBody>;
 
 // ---------------------------------------------------------------------------
 // spell list (§5, reserved)
@@ -254,6 +266,10 @@ export const sheetFile = z.discriminatedUnion("kind", [
   actorBody.extend({ ...envelope, kind: z.literal("actor") }),
   spellListBody.extend({ ...envelope, kind: z.literal("spellList") }),
   actorPatchBody.extend({ ...envelope, kind: z.literal("actorPatch") }),
+  itemPatchBody.extend({ ...envelope, kind: z.literal("itemPatch") }),
+  // item fields sit next to kind; parse.ts runs them through sheetItem
+  z.object({ ...envelope, kind: z.literal("item") }).passthrough(),
+  z.object({ ...envelope, kind: z.literal("itemBatch"), items: z.array(sheetItem).min(1) }),
   z.object({
     ...envelope,
     kind: z.literal("actorBatch"),

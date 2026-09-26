@@ -1,10 +1,10 @@
 import CONSTANTS from "../constants";
 import { buildLore, buildNamedSkills, isKnownSkill, type Vocabulary } from "../build/actorData";
-import { reactionHtml, toHtml } from "../build/homebrew";
 import { computeStrike, type StrikeFlag, type StrikeStats } from "../build/strikeMath";
 import { classifyAttackEffect } from "../parse";
 import { isHomebrewStrike, type AbilityKey, type ActorPatchDoc, type SheetItem } from "../schema";
-import { randomID, sluggify } from "../slug";
+import { sluggify } from "../slug";
+import { fieldGroups, itemFieldUpdate, runeUpdate } from "./itemFields";
 import { LIST_PATHS, loreKey, normalizeOps, type ActorSource, type ListSpec, type PathContext } from "./paths";
 
 export interface PatchChanges {
@@ -24,10 +24,6 @@ export interface PatchChanges {
 }
 
 const ABILITIES: AbilityKey[] = ["str", "dex", "con", "int", "wis", "cha"];
-const WEAPON_FIELDS = ["proficiency", "runes", "abilityOverride", "damageAbilityOverride"] as const;
-const ACTION_FIELDS = ["actionType", "category", "trigger"] as const;
-const STRIKE_FIELDS = ["attackBonus", "damageRolls", "attackEffects"] as const;
-const COMMON_FIELDS = ["name", "description", "traits"] as const;
 
 function show(value: unknown): string {
   if (value === undefined || value === null || value === "") return "none";
@@ -226,11 +222,7 @@ export function buildPatchChanges(doc: ActorPatchDoc, source: ActorSource, vocab
 
   doc.items.update.forEach(({ match, set: fields }, index) => {
     const where = `items.update.${index}`;
-    const has = (keys: readonly string[]) => keys.filter((key) => key in fields);
-    const weaponKeys = has(WEAPON_FIELDS);
-    const actionKeys = has(ACTION_FIELDS);
-    const strikeKeys = has(STRIKE_FIELDS);
-    const commonKeys = has(COMMON_FIELDS);
+    const { weapon: weaponKeys, action: actionKeys, strike: strikeKeys, common: commonKeys } = fieldGroups(fields);
     const hits = byName(match);
     const wanted = match.trim().toLowerCase();
 
@@ -249,11 +241,7 @@ export function buildPatchChanges(doc: ActorPatchDoc, source: ActorSource, vocab
         if (fields.damageAbilityOverride !== undefined) flag.damageAbilityOverride = fields.damageAbilityOverride;
         flagEdits.set(strike._id, flag);
       }
-      for (const weapon of hits.filter((item) => item.type === "weapon")) {
-        const u = updateFor(weapon._id);
-        if (fields.runes?.potency !== undefined) u["system.runes.potency"] = fields.runes.potency;
-        if (fields.runes?.striking !== undefined) u["system.runes.striking"] = fields.runes.striking;
-      }
+      for (const weapon of hits.filter((item) => item.type === "weapon")) Object.assign(updateFor(weapon._id), runeUpdate(fields));
     }
 
     if (!actionKeys.length && !strikeKeys.length && !commonKeys.length) {
@@ -276,29 +264,7 @@ export function buildPatchChanges(doc: ActorPatchDoc, source: ActorSource, vocab
     }
 
     for (const item of targets) {
-      const u = updateFor(item._id);
-      if (fields.name) {
-        u.name = fields.name;
-        u["system.slug"] = sluggify(fields.name);
-      }
-      if (fields.traits) u["system.traits.value"] = fields.traits.map(sluggify);
-      if (fields.description !== undefined) {
-        u["system.description.value"] = fields.trigger ? reactionHtml(fields.trigger, fields.description) : toHtml(fields.description);
-      }
-      if (fields.actionType !== undefined) {
-        const counted = typeof fields.actionType === "number";
-        u["system.actionType.value"] = counted ? "action" : fields.actionType;
-        u["system.actions.value"] = counted ? fields.actionType : null;
-      }
-      if (fields.category !== undefined) u["system.category"] = fields.category;
-      if (fields.attackBonus !== undefined) u["system.bonus.value"] = fields.attackBonus;
-      if (fields.attackEffects) u["system.attackEffects.value"] = fields.attackEffects.map(sluggify);
-      if (fields.damageRolls) {
-        for (const key of Object.keys(item.system?.damageRolls ?? {})) u[`system.damageRolls.-=${key}`] = null;
-        for (const roll of fields.damageRolls) {
-          u[`system.damageRolls.${randomID()}`] = { damage: roll.damage, damageType: sluggify(roll.damageType), category: null };
-        }
-      }
+      Object.assign(updateFor(item._id), itemFieldUpdate(item, fields));
       changes.push(`~ ${item.name}: ${[...commonKeys, ...actionKeys, ...strikeKeys].join(", ")}`);
     }
   });

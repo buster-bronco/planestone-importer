@@ -1,0 +1,26 @@
+# world items for the items sidebar; import from Actors or Items → Import Sheet
+schemaVersion: 1
+kind: itemBatch
+
+items:
+  - origin: homebrew
+    type: action
+    name: Hold the Line
+    actionType: reaction
+    category: defensive
+    trigger: "An ally within 10 feet is hit by a melee attack."
+    description: "The ally gains resistance 5 to the triggering damage and the attacker is [[off-guard]] until the end of its turn."
+
+  - origin: homebrew
+    type: passive
+    name: Border Sense
+    traits: [divination]
+    description: "The warden always knows which side of the Dranura border it stands on."
+
+  - origin: compendiumRef
+    refType: equipment
+    lookup: { name: "Longsword" }
+
+  - origin: compendiumRef
+    refType: spell
+    lookup: { name: "Daze" }

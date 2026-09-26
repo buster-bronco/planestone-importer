@@ -6,6 +6,7 @@ declare const Hooks: any;
 declare const CONFIG: any;
 declare const foundry: any;
 declare const Actor: any;
+declare const Item: any;
 declare function fromUuid(uuid: string): Promise<any>;
 
 declare module "*.scss";

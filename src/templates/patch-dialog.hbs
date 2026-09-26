@@ -1,8 +1,8 @@
 <section class="npc-importer">
   {{#if isEdit}}
     <div class="body">
-      <p class="hint">{{localize "planestone-importer.patch.hint"}}</p>
-      <textarea name="patchText" class="paste" spellcheck="false" placeholder="schemaVersion: 1&#10;kind: actorPatch&#10;set:&#10;  core.ac: 23" {{#if busy}}disabled{{/if}}>{{text}}</textarea>
+      <p class="hint">{{hint}}</p>
+      <textarea name="patchText" class="paste" spellcheck="false" placeholder="{{placeholder}}" {{#if busy}}disabled{{/if}}>{{text}}</textarea>
     </div>
     <footer class="buttons">
       <label class="button file-button">

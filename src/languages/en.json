@@ -5,7 +5,7 @@
     },
     "dialog": {
       "title": "Import Planestone Sheet",
-      "hint": "Choose a Planestone sheet file (.yaml or .json), or paste one below. Nothing is created until you confirm the preview.",
+      "hint": "Choose a Planestone sheet file (.yaml or .json), or paste one below. It can hold NPCs or world items. Nothing is created until you confirm the preview.",
       "choose": "Choose file…",
       "reading": "Reading…",
       "errors": "Errors — nothing will be imported",
@@ -18,16 +18,20 @@
       "import": "Import",
       "importing": "Importing…",
       "another": "Import another",
-      "folder": "Folder",
+      "folder": "Actor folder",
       "rootFolder": "(Actors root)",
       "orPaste": "or paste a sheet",
       "loadText": "Load text",
-      "pastedText": "Pasted text"
+      "pastedText": "Pasted text",
+      "type": "Type",
+      "itemFolder": "Item folder",
+      "itemRootFolder": "(Items root)"
     },
     "notify": {
-      "created": "NPCs created",
+      "imported": "Documents created",
       "patched": "NPC patched",
-      "patchFailed": "Patch failed, changes rolled back"
+      "patchFailed": "Patch failed, changes rolled back",
+      "itemPatched": "Item patched"
     },
     "sheet": {
       "patch": "Patch"
@@ -42,7 +46,9 @@
       "apply": "Apply",
       "applying": "Applying…",
       "applied": "Patch applied.",
-      "another": "Edit patch"
+      "another": "Edit patch",
+      "itemTitle": "Patch Item",
+      "itemHint": "Paste a Planestone item patch (kind: itemPatch) or load one from a file. Nothing changes until you apply the preview."
     }
   }
 }
