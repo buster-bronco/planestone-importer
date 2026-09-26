@@ -241,7 +241,7 @@ items:
 - homebrew `melee`/`ranged` strikes and `equippedWeapon` are errors because strikes only exist on actors. For a plain world weapon, use `compendiumRef` with `refType: equipment`.
 - `[[...]]` link marks work the same as on actors.
 
-A file holds either actors or items, not both, because each envelope `kind` holds one or the other. Each item is created on its own, so one failure doesn't stop the rest.
+A file holds either actors or items, not both. Top-level keys are strict, so an `items:` list in an `actorBatch` (or `actors:` in an `itemBatch` or `item`) is an error instead of being dropped, as is any other unknown top-level key. Each item is created on its own, so one failure doesn't stop the rest.
 
 ### Spell lists (reserved)
 

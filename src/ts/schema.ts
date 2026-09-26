@@ -395,22 +395,24 @@ export type SpellListDoc = z.infer<typeof spellListBody>;
 
 const envelope = { schemaVersion: z.literal(1) };
 
+// top-level keys are strict; a stray actors or items list is an error, not dropped
 export const sheetFile = z.discriminatedUnion("kind", [
-  actorBody.extend({ ...envelope, kind: z.literal("actor") }),
-  vehicleBody.extend({ ...envelope, kind: z.literal("vehicle") }),
-  hazardBody.extend({ ...envelope, kind: z.literal("hazard") }),
-  spellListBody.extend({ ...envelope, kind: z.literal("spellList") }),
-  actorPatchBody.extend({ ...envelope, kind: z.literal("actorPatch") }),
-  itemPatchBody.extend({ ...envelope, kind: z.literal("itemPatch") }),
+  actorBody.extend({ ...envelope, kind: z.literal("actor") }).strict(),
+  vehicleBody.extend({ ...envelope, kind: z.literal("vehicle") }).strict(),
+  hazardBody.extend({ ...envelope, kind: z.literal("hazard") }).strict(),
+  spellListBody.extend({ ...envelope, kind: z.literal("spellList") }).strict(),
+  actorPatchBody.extend({ ...envelope, kind: z.literal("actorPatch") }).strict(),
+  itemPatchBody.extend({ ...envelope, kind: z.literal("itemPatch") }).strict(),
   // item fields sit next to kind; parse.ts runs them through sheetItem
   z.object({ ...envelope, kind: z.literal("item") }).passthrough(),
-  z.object({ ...envelope, kind: z.literal("itemBatch"), items: z.array(sheetItem).min(1) }),
+  z.object({ ...envelope, kind: z.literal("itemBatch"), items: z.array(sheetItem).min(1) }).strict(),
   z.object({
     ...envelope,
     kind: z.literal("actorBatch"),
     actors: z.array(batchActor).min(1),
     spellLists: z.array(spellListBody.extend({ kind: z.literal("spellList").optional() })).default([]),
-  }),
+  })
+    .strict(),
 ]);
 
 export type SheetFile = z.infer<typeof sheetFile>;

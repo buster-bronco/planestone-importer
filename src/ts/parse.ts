@@ -44,8 +44,17 @@ export interface ParsedSheet {
   warnings: string[];
 }
 
-function formatIssue(issue: ZodIssue): string {
+// one file holds actors or world items; each kind names which
+const CONTAINER_KEYS = new Set(["actors", "items", "spellLists"]);
+
+function formatIssue(issue: ZodIssue, kind?: unknown): string {
   const path = issue.path.length ? issue.path.join(".") : "(root)";
+  if (issue.code === "unrecognized_keys") {
+    const keys = issue.keys.map((key) => `"${key}"`).join(", ");
+    const mixed = !issue.path.length && issue.keys.some((key) => CONTAINER_KEYS.has(key));
+    const hint = mixed ? `; kind: ${kind} can't hold that list, put it in its own file` : "";
+    return `${path}: unknown key(s) ${keys}${hint}`;
+  }
   return `${path}: ${issue.message}`;
 }
 
@@ -63,7 +72,8 @@ export function parseSheetText(text: string): ParsedSheet {
 
   const parsed = sheetFile.safeParse(asActorKind(raw));
   if (!parsed.success) {
-    result.errors.push(...parsed.error.issues.map(formatIssue));
+    const kind = (raw as any)?.kind;
+    result.errors.push(...parsed.error.issues.map((issue) => formatIssue(issue, kind)));
     return result;
   }
 
@@ -77,6 +87,11 @@ export function parseSheetText(text: string): ParsedSheet {
   else if (doc.kind === "itemBatch") result.items.push(...doc.items);
   else if (doc.kind === "item") {
     const { schemaVersion: _version, kind: _kind, ...fields } = doc;
+    const stray = Object.keys(fields).filter((key) => CONTAINER_KEYS.has(key));
+    if (stray.length) {
+      result.errors.push(`(root): unknown key(s) ${stray.map((key) => `"${key}"`).join(", ")}; kind: item can't hold that list, use itemBatch or its own file`);
+      return result;
+    }
     const item = sheetItem.safeParse(fields);
     if (!item.success) {
       result.errors.push(...item.error.issues.map(formatIssue));

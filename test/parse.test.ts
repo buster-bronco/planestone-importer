@@ -70,4 +70,32 @@ items:
   it("reports yaml syntax errors", () => {
     expect(parseSheetText("kind: [unclosed").errors[0]).toMatch(/could not read file/);
   });
+
+  describe("mixed actors and items", () => {
+    const hazard = "  - meta: { name: Raft, actorType: hazard, level: 0 }\n    core: { stealth: { mod: 1 } }\n";
+    const passive = "  - { origin: homebrew, type: passive, name: Loose }\n";
+
+    it("rejects world items in an actorBatch", () => {
+      const result = parseSheetText(`schemaVersion: 1\nkind: actorBatch\nactors:\n${hazard}items:\n${passive}`);
+      expect(result.hazards).toEqual([]);
+      expect(result.errors).toEqual([`(root): unknown key(s) "items"; kind: actorBatch can't hold that list, put it in its own file`]);
+    });
+
+    it("rejects actors in an itemBatch", () => {
+      const result = parseSheetText(`schemaVersion: 1\nkind: itemBatch\nitems:\n${passive}actors:\n${hazard}`);
+      expect(result.items).toEqual([]);
+      expect(result.errors[0]).toContain(`"actors"; kind: itemBatch can't hold that list`);
+    });
+
+    it("rejects actors next to a single item", () => {
+      const result = parseSheetText(`schemaVersion: 1\nkind: item\norigin: homebrew\ntype: passive\nname: Loose\nactors:\n${hazard}`);
+      expect(result.items).toEqual([]);
+      expect(result.errors[0]).toContain("kind: item can't hold that list");
+    });
+
+    it("rejects other unknown top-level keys without the hint", () => {
+      const result = parseSheetText(example("vehicle.yaml").replace("kind: vehicle", "kind: vehicle\nfolder: Ships"));
+      expect(result.errors).toEqual([`(root): unknown key(s) "folder"`]);
+    });
+  });
 });
