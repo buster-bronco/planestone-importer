@@ -76,11 +76,72 @@ const homebrewStrike = z.object({
   description: z.string().default(""),
 });
 
+const TRADITIONS = ["arcane", "divine", "occult", "primal"] as const;
+const tradition = z.enum(TRADITIONS);
+
+// spell casting time: action count, reaction/free, or text like "1 minute"
+const spellActions = z.union([z.enum(["reaction", "free"]), z.literal(1), z.literal(2), z.literal(3), z.string().min(1)]);
+
+const spellDamage = z.object({
+  formula: z.string().min(1),
+  type: z.string().min(1),
+  category: z.enum(["persistent", "splash"]).nullable().default(null),
+});
+
+const homebrewSpell = z
+  .object({
+    origin: z.literal("homebrew"),
+    type: z.literal("spell"),
+    name: z.string().min(1),
+    // base rank; cantrips are rank 1 in pf2e
+    rank: z.number().int().min(1).max(10).default(1),
+    cantrip: z.boolean().default(false),
+    focus: z.boolean().default(false),
+    traditions: z.array(tradition).default([]),
+    traits: z.array(z.string()).default([]),
+    rarity: z.enum(["common", "uncommon", "rare", "unique"]).default("common"),
+    actions: spellActions.default(2),
+    trigger: z.string().min(1).optional(),
+    requirements: z.string().default(""),
+    // a bare number means feet
+    range: z.union([z.string(), z.number().int().positive().transform((feet) => `${feet} feet`)]).default(""),
+    area: z.object({ type: z.string().min(1), value: z.number().int().positive() }).nullable().default(null),
+    targets: z.string().default(""),
+    duration: z.string().default(""),
+    sustained: z.boolean().default(false),
+    // ac means a spell attack roll against ac
+    defense: z
+      .object({ save: z.enum(["fortitude", "reflex", "will", "ac"]), basic: z.boolean().default(false) })
+      .nullable()
+      .default(null),
+    damage: z.array(spellDamage).default([]),
+    // interval heightening: every n ranks add each formula to the damage at the same index
+    heightening: z.object({ every: z.number().int().min(1).default(1), damage: z.array(z.string().min(1)).min(1) }).optional(),
+    description: z.string().default(""),
+  })
+  .superRefine((item, ctx) => {
+    if (item.actions === "reaction" && !item.trigger) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["trigger"], message: "trigger is required when actions is reaction" });
+    }
+    if (item.heightening && item.heightening.damage.length > item.damage.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["heightening", "damage"], message: "heightening has more entries than damage" });
+    }
+  });
+
 export type CompendiumRefItem = z.infer<typeof compendiumRef>;
 export type EquippedWeaponItem = z.infer<typeof equippedWeapon>;
 export type HomebrewActionItem = z.infer<typeof homebrewAction>;
 export type HomebrewStrikeItem = z.infer<typeof homebrewStrike>;
-export type SheetItem = CompendiumRefItem | EquippedWeaponItem | HomebrewActionItem | HomebrewStrikeItem;
+export type HomebrewSpellItem = z.infer<typeof homebrewSpell>;
+export type SheetItem = CompendiumRefItem | EquippedWeaponItem | HomebrewActionItem | HomebrewStrikeItem | HomebrewSpellItem;
+
+export function isHomebrewSpell(item: SheetItem): item is HomebrewSpellItem {
+  return item.origin === "homebrew" && item.type === "spell";
+}
+
+export function isSpellItem(item: SheetItem): boolean {
+  return isHomebrewSpell(item) || (item.origin === "compendiumRef" && item.refType === "spell");
+}
 
 export function isHomebrewStrike(item: SheetItem): item is HomebrewStrikeItem {
   return item.origin === "homebrew" && (item.type === "melee" || item.type === "ranged");
@@ -95,12 +156,12 @@ export const sheetItem = z
   .discriminatedUnion("origin", [
     compendiumRef,
     equippedWeapon,
-    z.object({ origin: z.literal("homebrew"), type: z.enum(["action", "passive", "melee", "ranged"]) }).passthrough(),
+    z.object({ origin: z.literal("homebrew"), type: z.enum(["action", "passive", "melee", "ranged", "spell"]) }).passthrough(),
   ])
   .transform((value, ctx): SheetItem => {
     if (value.origin !== "homebrew") return value;
     const isStrike = value.type === "melee" || value.type === "ranged";
-    const parsed = (isStrike ? homebrewStrike : homebrewAction).safeParse(value);
+    const parsed = (value.type === "spell" ? homebrewSpell : isStrike ? homebrewStrike : homebrewAction).safeParse(value);
     if (parsed.success) return parsed.data;
     for (const issue of parsed.error.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, path: issue.path, message: issue.message });
     return z.NEVER;
@@ -168,12 +229,89 @@ export const metaSchema = z.object({
   source: z.string().optional(),
 });
 
+// ---------------------------------------------------------------------------
+// spellcasting (§5)
+// ---------------------------------------------------------------------------
+
+export const SPELL_RANK_KEYS = ["cantrips", ...Array.from({ length: 10 }, (_, i) => `rank${i + 1}`)] as const;
+export type SpellRankKey = (typeof SPELL_RANK_KEYS)[number];
+
+// innate spells: uses per day, or pf2e's at will / constant name suffix
+const spellUses = z.union([z.number().int().min(1), z.enum(["at-will", "constant"])]);
+
+// a bare string is a compendium spell name
+const spellRef = z
+  .union([
+    z.string().min(1).transform((name) => ({ origin: "compendiumRef" as const, lookup: { name } })),
+    z.object({}).passthrough(),
+  ])
+  .transform((value, ctx) => {
+    const { uses, ...fields } = value as Record<string, unknown>;
+    // { name, pack } without an origin is a compendium spell too
+    const { name, pack, ...rest } = fields;
+    const shorthand = fields.origin === undefined ? { ...rest, origin: "compendiumRef", lookup: { name, pack } } : fields;
+    const withRef = shorthand.origin === "compendiumRef" ? { refType: "spell", ...shorthand } : shorthand;
+    const item = sheetItem.safeParse(withRef);
+    const usesParsed = spellUses.optional().safeParse(uses);
+    if (!item.success) for (const issue of item.error.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, path: issue.path, message: issue.message });
+    if (!usesParsed.success) for (const issue of usesParsed.error.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["uses"], message: issue.message });
+    if (!item.success || !usesParsed.success) return z.NEVER;
+    if (!isSpellItem(item.data)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["origin"], message: "spell lists take spell names, compendiumRef spells or homebrew spells" });
+      return z.NEVER;
+    }
+    return { item: item.data as CompendiumRefItem | HomebrewSpellItem, uses: usesParsed.data };
+  });
+
+export type SpellRef = z.infer<typeof spellRef>;
+
+const rankRecord = <T extends z.ZodTypeAny>(value: T) =>
+  z.object(Object.fromEntries(SPELL_RANK_KEYS.map((key) => [key, value.optional()])) as Record<SpellRankKey, z.ZodOptional<T>>).strict();
+
+const castingType = z.enum(["prepared", "spontaneous", "innate", "focus"]);
+
+const spellcastingFields = z.object({
+  name: z.string().min(1).optional(),
+  tradition,
+  type: castingType,
+  ability: abilityKey.default("cha"),
+  dc: z.number().int(),
+  attack: z.number().int().optional(),
+  focusPoints: z.number().int().min(1).max(3).optional(),
+  // slots per rank; prepared defaults to the number of spells listed
+  slots: rankRecord(z.number().int().min(0)).optional(),
+  spells: rankRecord(z.array(spellRef)).default({}),
+});
+
+type SpellcastingFields = z.infer<typeof spellcastingFields>;
+
+// cross-field rules shared by inline entries and spell lists
+function checkSpellcastingFields(entry: SpellcastingFields, ctx: z.RefinementCtx): void {
+  const issue = (path: (string | number)[], message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+  if (entry.type === "spontaneous" && !entry.slots) issue(["slots"], "spontaneous spellcasting needs slots per rank");
+  if (entry.slots && (entry.type === "innate" || entry.type === "focus")) issue(["slots"], `${entry.type} spellcasting has no slots`);
+  if (entry.focusPoints !== undefined && entry.type !== "focus") issue(["focusPoints"], "focusPoints only applies to focus spellcasting");
+  for (const key of SPELL_RANK_KEYS) {
+    entry.spells[key]?.forEach((ref, index) => {
+      // a ref that failed to parse already has its own issue
+      if (!ref?.item) return;
+      if (ref.uses !== undefined && entry.type !== "innate") issue(["spells", key, index, "uses"], "uses only applies to innate spells");
+      if (key !== "cantrips" && isHomebrewSpell(ref.item) && ref.item.cantrip) issue(["spells", key, index], `"${ref.item.name}" is a cantrip; list it under cantrips`);
+    });
+  }
+}
+
+export const spellcastingEntry = spellcastingFields.superRefine(checkSpellcastingFields);
+export type SpellcastingEntry = z.infer<typeof spellcastingEntry>;
+
 const actorBody = z.object({
   meta: metaSchema,
   core: coreSchema,
   items: z.array(sheetItem).default([]),
-  // spellcasting is reserved for a later version
-  spellcasting: z.unknown().optional(),
+  // entries inline, or ids of spell lists in the same batch; a single one is wrapped
+  spellcasting: z
+    .preprocess((value) => (value === undefined || Array.isArray(value) ? value : [value]), z.array(z.union([z.string().min(1), spellcastingEntry])))
+    .default([]),
 });
 
 export type ActorDoc = z.infer<typeof actorBody>;
@@ -376,18 +514,13 @@ const itemPatchBody = z.object({
 export type ItemPatchDoc = z.infer<typeof itemPatchBody>;
 
 // ---------------------------------------------------------------------------
-// spell list (§5, reserved)
+// spell list (§5)
 // ---------------------------------------------------------------------------
 
-const spellListBody = z.object({
-  id: z.string().min(1),
-  tradition: z.enum(["arcane", "divine", "occult", "primal"]),
-  basis: z.enum(["spellDC", "spellAttack"]),
-  dcOrAttack: z.number().int(),
-  slots: z.record(z.string(), z.array(z.unknown())).default({}),
-});
+// a spellcasting entry actors point at by id
+const spellListFields = spellcastingFields.extend({ id: z.string().min(1) });
 
-export type SpellListDoc = z.infer<typeof spellListBody>;
+export type SpellListDoc = z.infer<typeof spellListFields>;
 
 // ---------------------------------------------------------------------------
 // envelope (§1)
@@ -396,11 +529,13 @@ export type SpellListDoc = z.infer<typeof spellListBody>;
 const envelope = { schemaVersion: z.literal(1) };
 
 // top-level keys are strict; a stray actors or items list is an error, not dropped
-export const sheetFile = z.discriminatedUnion("kind", [
+// a discriminated union only takes plain objects, so the spell list check runs after it
+export const sheetFile = z
+  .discriminatedUnion("kind", [
   actorBody.extend({ ...envelope, kind: z.literal("actor") }).strict(),
   vehicleBody.extend({ ...envelope, kind: z.literal("vehicle") }).strict(),
   hazardBody.extend({ ...envelope, kind: z.literal("hazard") }).strict(),
-  spellListBody.extend({ ...envelope, kind: z.literal("spellList") }).strict(),
+  spellListFields.extend({ ...envelope, kind: z.literal("spellList") }).strict(),
   actorPatchBody.extend({ ...envelope, kind: z.literal("actorPatch") }).strict(),
   itemPatchBody.extend({ ...envelope, kind: z.literal("itemPatch") }).strict(),
   // item fields sit next to kind; parse.ts runs them through sheetItem
@@ -410,9 +545,12 @@ export const sheetFile = z.discriminatedUnion("kind", [
     ...envelope,
     kind: z.literal("actorBatch"),
     actors: z.array(batchActor).min(1),
-    spellLists: z.array(spellListBody.extend({ kind: z.literal("spellList").optional() })).default([]),
+    spellLists: z.array(spellListFields.extend({ kind: z.literal("spellList").optional() }).superRefine(checkSpellcastingFields)).default([]),
   })
     .strict(),
-]);
+  ])
+  .superRefine((doc, ctx) => {
+    if (doc.kind === "spellList") checkSpellcastingFields(doc, ctx);
+  });
 
 export type SheetFile = z.infer<typeof sheetFile>;

@@ -1,13 +1,17 @@
 schemaVersion: 1
 kind: actorBatch
 
+# shared spellcasting entries; actors point at them by id
 spellLists:
   - id: armada-occult
     tradition: occult
-    basis: spellDC
-    dcOrAttack: 20
-    slots:
-      cantrips: [{ origin: compendiumRef, lookup: { name: "Daze" } }]
+    type: prepared
+    ability: int
+    dc: 20
+    spells:
+      cantrips: [Daze, Shield]
+      rank1: [Fear, Fear]
+      rank2: [Invisibility]
 
 actors:
   - meta: { name: Armada Deckhand, level: 1 }

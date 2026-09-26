@@ -22,3 +22,9 @@ items:
     type: melee
     name: Claw
     damageRolls: [{ damage: "1d6", damageType: slashing }]
+spellcasting:
+  - tradition: arcane
+    type: spontaneous
+    dc: 18
+    spells:
+      rank1: [Force Barrage]

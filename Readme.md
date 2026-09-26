@@ -81,6 +81,7 @@ core:
   weaknesses: [{ type, value }]
   immunities: [{ type }]
 items: [...]
+spellcasting: [...]             # see Spellcasting
 ```
 
 Senses use `name (precise|imprecise|vague) N feet`, and the acuity and range parts are optional. `alignment` is accepted but ignored because the pf2e remaster removed it.
@@ -160,7 +161,7 @@ Without a `pack` hint, the importer searches these packs in order and uses the f
 |---|---|
 | action | bestiary-ability-glossary-srd → actionspf2e → bestiary-family-ability-glossary → adventure-specific-actions |
 | equipment | equipment-srd |
-| spell | spells-srd (skipped with a warning until spellcasting lands) |
+| spell | spells-srd (world items and `spellcasting` lists only; an actor's `items` rejects spells) |
 
 **equippedWeapon**: a pf2e weapon turned into an NPC strike.
 
@@ -203,6 +204,32 @@ Weapon specialization isn't added. With `keepInInventory: false` the weapon is r
   attackEffects: [knockdown-crash]
 ```
 
+```yaml
+- origin: homebrew
+  type: spell
+  name: Border Ward
+  rank: 1                      # base rank, 1–10; cantrips are rank 1
+  cantrip: false               # adds the cantrip trait
+  focus: false                 # adds the focus trait
+  traditions: [primal]
+  traits: [earth]
+  rarity: common
+  actions: 2                   # 1 | 2 | 3 | reaction | free | text like "1 minute"
+  trigger: "…"                 # required for reactions
+  requirements: ""
+  range: 30                    # number → "30 feet", or text
+  area: { type: burst, value: 10 }
+  targets: "1 creature"
+  duration: ""
+  sustained: false
+  defense: { save: reflex, basic: true }   # fortitude | reflex | will | ac (spell attack, adds the attack trait)
+  damage: [{ formula: 2d6, type: bludgeoning, category: null }]   # category: persistent | splash
+  heightening: { every: 1, damage: [1d6] }  # adds each formula to the damage at the same index
+  description: "…"
+```
+
+Homebrew spells go in a `spellcasting` list or in world items (`item`/`itemBatch`). An actor's `items` rejects them.
+
 `attackEffects` entries must be slugs of action items on the same actor. The one exception is pf2e's built-in effects (`grab`, `improved-grab`, `constrict`, `greater-constrict`, `knockdown`, `improved-knockdown`, `push`, `improved-push`, `trip`): they only produce a warning when the actor has no matching item.
 
 ### Links in descriptions
@@ -237,24 +264,55 @@ items:
   - { origin: compendiumRef, refType: spell, lookup: { name: Daze } }
 ```
 
-- homebrew `action`/`passive` and `compendiumRef` of any `refType` work. Spells are imported too, since a world spell doesn't need a spellcasting entry.
+- homebrew `action`/`passive`/`spell` and `compendiumRef` of any `refType` work. Spells import as plain world spells, with no spellcasting entry needed.
 - homebrew `melee`/`ranged` strikes and `equippedWeapon` are errors because strikes only exist on actors. For a plain world weapon, use `compendiumRef` with `refType: equipment`.
 - `[[...]]` link marks work the same as on actors.
 
 A file holds either actors or items, not both. Top-level keys are strict, so an `items:` list in an `actorBatch` (or `actors:` in an `itemBatch` or `item`) is an error instead of being dropped, as is any other unknown top-level key. Each item is created on its own, so one failure doesn't stop the rest.
 
-### Spell lists (reserved)
+### Spellcasting
+
+An NPC's `spellcasting` is a list of entries. Each entry becomes a pf2e spellcasting entry holding its spells. An entry is either written inline or given as the `id` of a spell list in the same `actorBatch`. A single entry or id doesn't need a list around it.
 
 ```yaml
-kind: spellList
-id: armada-occult
-tradition: arcane | divine | occult | primal
-basis: spellDC | spellAttack
-dcOrAttack: 20
-slots: { cantrips: [...], rank1: [...] }
+spellcasting:
+  - armada-occult                   # id of an actorBatch spellLists entry
+  - name: Warden Innate Spells      # optional; defaults to "<Tradition> <Type> Spells"
+    tradition: primal               # arcane | divine | occult | primal
+    type: innate                    # prepared | spontaneous | innate | focus
+    ability: wis                    # defaults to cha
+    dc: 21
+    attack: 13                      # defaults to dc - 10
+    focusPoints: 1                  # focus only, defaults to 1; the actor's pool is the total, max 3
+    slots: { rank1: 3, rank2: 2 }   # spontaneous (required) or prepared; innate/focus have none
+    spells:
+      cantrips: [Know the Way]      # bare string = spells-srd name
+      rank1:
+        - { name: Pass Without Trace, uses: constant }
+        - { origin: compendiumRef, lookup: { name: Heal, pack: spells-srd }, uses: 2 }
+      rank2:
+        - { origin: homebrew, type: spell, name: Border Ward, rank: 1, … }
 ```
 
-Spell lists are validated, and an actor's `spellcasting: <id>` must point at one. They aren't imported yet.
+- `spells` keys are `cantrips` and `rank1`–`rank10`. A spell is a name, `{ name, pack }`, a `compendiumRef` (`refType` can be left out), or a homebrew spell.
+- A spell listed above its own rank is heightened to that rank. For prepared entries the slot handles the heightening. A spell listed below its own rank, a cantrip under a rank, or a non-cantrip under `cantrips` gets a warning and moves to where it belongs.
+- Prepared spells fill their slots in order, and a repeated name prepares it twice. Without `slots`, each rank gets as many slots as it has spells.
+- `uses` (innate only) is uses per day, or `at-will` / `constant`, which add pf2e's `(At Will)` / `(Constant)` name suffix.
+- A spell that isn't found gets a warning and is dropped, and its entry and actor still import. Its prepared slot is dropped with it.
+
+Spell lists share one entry between actors. They take the same fields plus an `id` and live under `actorBatch` → `spellLists`:
+
+```yaml
+spellLists:
+  - id: armada-occult
+    tradition: occult
+    type: prepared
+    ability: int
+    dc: 20
+    spells: { cantrips: [Daze, Shield], rank1: [Fear, Fear] }
+```
+
+A `kind: spellList` file on its own validates but imports nothing. Patches can't add or replace spells yet, and **Copy sheet** lists spells as not exported.
 
 ### Patches (`actorPatch`)
 

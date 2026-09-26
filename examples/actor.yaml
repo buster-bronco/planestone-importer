@@ -64,3 +64,30 @@ items:
     category: defensive
     trigger: "An ally within 10 feet is hit by a melee attack."
     description: "The warden steps in; the ally gains resistance 5 to the triggering damage and the attacker is [[off-guard]] until the end of its turn. Roll [[/r 1d4]] rounds of shaking afterward."
+
+spellcasting:
+  - name: Warden Innate Spells
+    tradition: primal
+    type: innate
+    ability: wis
+    dc: 21
+    attack: 13
+    spells:
+      cantrips: [Know the Way]
+      rank1:
+        - { name: Pass Without Trace, uses: constant }
+      rank2:
+        - { origin: compendiumRef, lookup: { name: Heal, pack: spells-srd }, uses: 2 }
+        - origin: homebrew
+          type: spell
+          name: Border Ward
+          rank: 1
+          traditions: [primal]
+          traits: [earth]
+          actions: 2
+          range: 30
+          area: { type: burst, value: 10 }
+          defense: { save: reflex, basic: true }
+          damage: [{ formula: 2d6, type: bludgeoning }]
+          heightening: { every: 1, damage: [1d6] }
+          description: "Stones erupt from the ground. Creatures that fail are knocked [[prone]]."

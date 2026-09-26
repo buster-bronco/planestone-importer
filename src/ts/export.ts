@@ -146,7 +146,7 @@ export function exportActor(source: ActorSource & { flags?: any }, sourceName: S
       continue;
     }
     if (item.type === "spell") {
-      skipped.push(`${item.name} (spell; npc spellcasting isn't supported yet)`);
+      skipped.push(`${item.name} (spell; spells aren't exported yet)`);
       continue;
     }
     const entry = exportSheetItem(item, sourceName);

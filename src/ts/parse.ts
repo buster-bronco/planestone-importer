@@ -5,6 +5,7 @@ import {
   isHomebrewAction,
   isHazardDoc,
   isHomebrewStrike,
+  isSpellItem,
   isVehicleDoc,
   sheetFile,
   sheetItem,
@@ -81,7 +82,10 @@ export function parseSheetText(text: string): ParsedSheet {
   if (doc.kind === "actor") result.actors.push(doc);
   else if (doc.kind === "vehicle") result.vehicles.push(doc);
   else if (doc.kind === "hazard") result.hazards.push(doc);
-  else if (doc.kind === "spellList") result.spellLists.push(doc);
+  else if (doc.kind === "spellList") {
+    result.spellLists.push(doc);
+    result.warnings.push(`spell list "${doc.id}" imports nothing on its own; put it in an actorBatch's spellLists and point spellcasting at it`);
+  }
   else if (doc.kind === "actorPatch") result.patches.push(doc);
   else if (doc.kind === "itemPatch") result.itemPatches.push(doc);
   else if (doc.kind === "itemBatch") result.items.push(...doc.items);
@@ -105,10 +109,6 @@ export function parseSheetText(text: string): ParsedSheet {
       else result.actors.push(actor);
     }
     result.spellLists.push(...doc.spellLists);
-  }
-
-  if (result.spellLists.length) {
-    result.warnings.push(`${result.spellLists.length} spell list(s) found; spellcasting import isn't supported yet`);
   }
 
   for (const actor of result.actors) checkActor(actor, result);
@@ -135,6 +135,12 @@ export function patchLabel(patch: ActorPatchDoc): string {
 function checkPatch(patch: ActorPatchDoc, result: ParsedSheet): void {
   const label = patchLabel(patch);
   for (const error of normalizeOps(patch).errors) result.errors.push(`patch ${label}: ${error}`);
+  patch.items.add.forEach((item, index) => {
+    if (isSpellItem(item)) result.errors.push(`patch ${label}: items.add.${index}: patching spells isn't supported yet`);
+  });
+  patch.items.replace.forEach(({ with: item }, index) => {
+    if (isSpellItem(item)) result.errors.push(`patch ${label}: items.replace.${index}.with: patching spells isn't supported yet`);
+  });
 }
 
 // strikes and weapon strikes only mean something on an npc
@@ -152,7 +158,7 @@ function checkVehicle(vehicle: VehicleDoc, result: ParsedSheet): void {
   vehicle.items.forEach((item, index) => {
     if (item.origin === "equippedWeapon" || isHomebrewStrike(item)) {
       result.errors.push(`${name}: items.${index}: vehicles can't hold strikes; describe mounted weapons as homebrew actions`);
-    } else if (item.origin === "compendiumRef" && item.refType === "spell") {
+    } else if (isSpellItem(item)) {
       result.errors.push(`${name}: items.${index}: vehicles can't hold spells`);
     }
   });
@@ -164,7 +170,7 @@ function checkHazard(hazard: HazardDoc, result: ParsedSheet): void {
   hazard.items.forEach((item, index) => {
     if (item.origin === "equippedWeapon") {
       result.errors.push(`${name}: items.${index}: hazards can't use equippedWeapon; write the attack as a homebrew melee or ranged strike`);
-    } else if (item.origin === "compendiumRef" && item.refType === "spell") {
+    } else if (isSpellItem(item)) {
       result.errors.push(`${name}: items.${index}: hazards can't hold spells; describe the effect in a homebrew action`);
     }
   });
@@ -205,11 +211,19 @@ function checkActor(actor: ActorDoc, result: ParsedSheet): void {
   const name = actor.meta.name;
   checkAttackEffects(name, actor.items, result);
 
-  if (actor.spellcasting !== undefined) {
-    const ref = actor.spellcasting;
-    if (typeof ref === "string" && !result.spellLists.some((list) => list.id === ref)) {
+  actor.items.forEach((item, index) => {
+    if (isSpellItem(item)) result.errors.push(`${name}: items.${index}: spells go under spellcasting, not items`);
+  });
+
+  // spell list ids become copies of the list so the importer only sees entries
+  actor.spellcasting = actor.spellcasting.map((ref) => {
+    if (typeof ref !== "string") return ref;
+    const list = result.spellLists.find((candidate) => candidate.id === ref);
+    if (!list) {
       result.errors.push(`${name}: spellcasting references unknown spell list "${ref}"`);
+      return ref;
     }
-    result.warnings.push(`${name}: spellcasting is ignored until spell import lands`);
-  }
+    const { id: _id, kind: _kind, schemaVersion: _version, ...entry } = list as typeof list & { kind?: string; schemaVersion?: number };
+    return structuredClone(entry);
+  });
 }

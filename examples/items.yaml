@@ -24,3 +24,17 @@ items:
   - origin: compendiumRef
     refType: spell
     lookup: { name: "Daze" }
+
+  - origin: homebrew
+    type: spell
+    name: Brine Lash
+    rank: 1
+    traditions: [occult, primal]
+    traits: [water]
+    actions: 2
+    range: 30
+    targets: "1 creature"
+    defense: { save: ac }
+    damage: [{ formula: 2d6, type: bludgeoning }]
+    heightening: { every: 1, damage: [1d6] }
+    description: "A whip of seawater lashes the target. On a critical hit, the target is pushed 5 feet."

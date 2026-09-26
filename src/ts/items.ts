@@ -1,9 +1,10 @@
 import CONSTANTS from "./constants";
 import { buildHomebrewAction, buildHomebrewStrike } from "./build/homebrew";
+import { buildHomebrewSpell } from "./build/spellData";
 import { computeStrike, dieFromDamage, type StrikeFlag, type StrikeStats } from "./build/strikeMath";
 import { applyLinkMarks, type LinkTarget } from "./linkMarks";
 import { normalizePackId, type PackIndex } from "./packIndex";
-import { isHomebrewStrike, type EquippedWeaponItem, type SheetItem } from "./schema";
+import { isHomebrewSpell, isHomebrewStrike, type EquippedWeaponItem, type SheetItem, type SpellRef } from "./schema";
 import { getGame } from "./utils";
 
 export interface PreparedWeapon {
@@ -16,8 +17,6 @@ export interface ItemContext {
   targets: Map<string, LinkTarget>;
   warn: (message: string) => void;
   fail: (message: string) => void;
-  // world items can hold spells; npcs need a spellcasting entry first
-  spells?: boolean;
 }
 
 export type ResolvedItem = { data: any } | { weapon: PreparedWeapon } | null;
@@ -45,37 +44,48 @@ export function sheetItemName(item: SheetItem): string {
   return item.origin === "homebrew" ? item.name : item.lookup.name;
 }
 
+function homebrewData(item: Extract<SheetItem, { origin: "homebrew" }>, ctx: ItemContext): any {
+  const data = isHomebrewSpell(item) ? buildHomebrewSpell(item) : isHomebrewStrike(item) ? buildHomebrewStrike(item, ctx.warn) : buildHomebrewAction(item);
+  linkDescription(data, ctx.targets, ctx.warn);
+  return data;
+}
+
+// compendium lookup by name; a miss or a bad pack hint calls fail and returns null
+async function findCompendium(lookup: { name: string; pack?: string }, refType: "action" | "equipment" | "spell", label: string, ctx: ItemContext): Promise<string | null> {
+  const packs = lookup.pack ? [normalizePackId(lookup.pack)] : CONSTANTS.PACKS_BY_REF_TYPE[refType];
+  if (lookup.pack && !game.packs.get(packs[0])) {
+    ctx.fail(`pack "${lookup.pack}" not found for "${lookup.name}"`);
+    return null;
+  }
+
+  const hit = await ctx.index.find(packs, lookup.name, label === "weapon" ? ["weapon"] : refType === "equipment" ? undefined : [refType]);
+  if (!hit) {
+    ctx.fail(`no ${label} named "${lookup.name}" in ${packs.join(", ")}`);
+    return null;
+  }
+  if (hit.alternatives.length) ctx.warn(`"${lookup.name}" matched ${hit.alternatives.length + 1} items; using ${hit.uuid}`);
+  return hit.uuid;
+}
+
 // sheet item → item data, or a weapon still waiting for its strike
 export async function resolveItem(item: SheetItem, ctx: ItemContext): Promise<ResolvedItem> {
-  const { index, targets, warn, fail } = ctx;
-  if (item.origin === "homebrew") {
-    const data = isHomebrewStrike(item) ? buildHomebrewStrike(item, warn) : buildHomebrewAction(item);
-    linkDescription(data, targets, warn);
-    return { data };
-  }
+  if (item.origin === "homebrew") return { data: homebrewData(item, ctx) };
 
   const isWeapon = item.origin === "equippedWeapon";
   const refType = isWeapon ? "equipment" : item.refType;
-  if (refType === "spell" && !ctx.spells) {
-    warn(`spell "${item.lookup.name}" skipped; spells need a spellcasting entry`);
-    return null;
-  }
+  const uuid = await findCompendium(item.lookup, refType, isWeapon ? "weapon" : refType, ctx);
+  if (!uuid) return null;
 
-  const packs = item.lookup.pack ? [normalizePackId(item.lookup.pack)] : CONSTANTS.PACKS_BY_REF_TYPE[refType];
-  if (item.lookup.pack && !game.packs.get(packs[0])) {
-    fail(`pack "${item.lookup.pack}" not found for "${item.lookup.name}"`);
-    return null;
-  }
-
-  const hit = await index.find(packs, item.lookup.name, isWeapon ? ["weapon"] : refType === "equipment" ? undefined : [refType]);
-  if (!hit) {
-    fail(`no ${isWeapon ? "weapon" : refType} named "${item.lookup.name}" in ${packs.join(", ")}`);
-    return null;
-  }
-  if (hit.alternatives.length) warn(`"${item.lookup.name}" matched ${hit.alternatives.length + 1} items; using ${hit.uuid}`);
-
-  const data = await compendiumItemData(hit.uuid);
+  const data = await compendiumItemData(uuid);
   return isWeapon ? { weapon: { item, source: data } } : { data };
+}
+
+// spell list entry → spell item data, not yet placed in an entry
+export async function resolveSpell(ref: SpellRef, ctx: ItemContext): Promise<any | null> {
+  const { item } = ref;
+  if (item.origin === "homebrew") return homebrewData(item, ctx);
+  const uuid = await findCompendium(item.lookup, "spell", "spell", ctx);
+  return uuid ? compendiumItemData(uuid) : null;
 }
 
 // weapon → pf2e's generated npc attack, with pc-style numbers swapped in; created ids go into `created`

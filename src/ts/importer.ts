@@ -1,12 +1,14 @@
 import CONSTANTS from "./constants";
 import { buildActorSystem, type Vocabulary } from "./build/actorData";
 import { buildHazardSystem, HAZARD_HTML_FIELDS } from "./build/hazardData";
+import { buildSpellcastingEntry, fillPreparedSlots, focusPool, placeSpell, type PlacedSpell } from "./build/spellData";
 import { buildVehicleSystem } from "./build/vehicleData";
-import { addWeaponStrike, linkHtml, resolveItem, sheetItemName, type PreparedWeapon } from "./items";
+import { addWeaponStrike, linkHtml, resolveItem, resolveSpell, sheetItemName, type ItemContext, type PreparedWeapon } from "./items";
 import type { LinkTarget } from "./linkMarks";
 import { PackIndex } from "./packIndex";
 import { parseSheetText } from "./parse";
-import type { ActorDoc, HazardDoc, SheetItem, VehicleDoc } from "./schema";
+import { SPELL_RANK_KEYS, type ActorDoc, type HazardDoc, type SheetItem, type SpellcastingEntry, type VehicleDoc } from "./schema";
+import { randomID } from "./slug";
 import { getGame } from "./utils";
 
 export type { PreparedWeapon } from "./items";
@@ -53,8 +55,8 @@ export interface ImportResult {
 }
 
 // a failed item lookup drops that item with a warning; the rest of the sheet still imports
-function skipItem(warnings: string[], name: string) {
-  return (message: string) => warnings.push(`${name}: ${message}; item skipped`);
+function skipItem(warnings: string[], name: string, what = "item") {
+  return (message: string) => warnings.push(`${name}: ${message}; ${what} skipped`);
 }
 
 export function vocabulary(): Vocabulary {
@@ -84,7 +86,29 @@ async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string
     else prepared.items.push(resolved.data);
   }
 
+  // parse.ts already swapped spell list ids for their entries
+  const entries = doc.spellcasting.filter((entry): entry is SpellcastingEntry => typeof entry !== "string");
+  const spellCtx: ItemContext = { index, targets, warn, fail: skipItem(prepared.warnings, name, "spell") };
+  for (const entry of entries) prepared.items.push(...(await prepareSpellcasting(entry, spellCtx)));
+
+  const focus = focusPool(entries);
+  if (focus) foundry.utils.setProperty(system, "resources.focus", { value: focus, max: focus });
   return prepared;
+}
+
+// one spellcasting entry plus its spells; spells that don't resolve are dropped
+async function prepareSpellcasting(entry: SpellcastingEntry, ctx: ItemContext): Promise<any[]> {
+  const entryId = randomID();
+  const entryData = buildSpellcastingEntry(entry, entryId);
+  const placed: PlacedSpell[] = [];
+  for (const key of SPELL_RANK_KEYS) {
+    for (const ref of entry.spells[key] ?? []) {
+      const data = await resolveSpell(ref, ctx);
+      if (data) placed.push(placeSpell(data, entry, entryId, key, ref.uses, ctx.warn));
+    }
+  }
+  fillPreparedSlots(entryData, entry, placed);
+  return [entryData, ...placed.map(({ data }) => data)];
 }
 
 async function prepareSimpleActor<Doc extends VehicleDoc | HazardDoc>(
@@ -147,7 +171,7 @@ export async function prepareImport(text: string): Promise<ImportPlan> {
     const name = sheetItemName(doc);
     const warn = (message: string) => plan.warnings.push(`${name}: ${message}`);
     const fail = skipItem(plan.warnings, name);
-    const resolved = await resolveItem(doc, { index, targets, warn, fail, spells: true });
+    const resolved = await resolveItem(doc, { index, targets, warn, fail });
     if (resolved && "data" in resolved) plan.items.push({ doc, data: resolved.data });
   }
   return plan;
@@ -208,7 +232,7 @@ export async function executeImport(plan: ImportPlan, options: ImportOptions = {
         system: prepared.system,
         items: prepared.items,
         flags: { [CONSTANTS.MODULE_ID]: { schemaVersion: 1, source: meta.source ?? null, freeArchetype: meta.freeArchetype } },
-      });
+      }, { keepEmbeddedIds: true });
       const stats = { level: meta.level, abilities: prepared.doc.core.abilities };
       for (const weapon of prepared.weapons) await addWeaponStrike(actor, weapon, stats);
       results.push({ name: meta.name, ok: true, actorUuid: actor.uuid });
