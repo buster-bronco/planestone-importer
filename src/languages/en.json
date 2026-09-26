@@ -36,7 +36,8 @@
       "patchFailed": "Patch failed, changes rolled back",
       "itemPatched": "Item patched",
       "copied": "Sheet copied to clipboard",
-      "contextSaved": "World context saved"
+      "contextSaved": "World context saved",
+      "contextLarge": "World context is large; trim it for cheaper prompts and tighter flavor text"
     },
     "sheet": {
       "patch": "Patch"
@@ -89,13 +90,16 @@
       "filesHint": ".md or .txt files from the Foundry data folder, read fresh on every prompt. Foundry serves that folder to anyone who knows the path, so keep secret notes in an out-of-the-way folder.",
       "noFiles": "No files added.",
       "addFile": "Add file…",
-      "remove": "Remove"
+      "remove": "Remove",
+      "tokens": "tokens in the text box"
     },
     "ai": {
       "promptPatch": "Prompt Patch",
       "promptSheet": "Prompt Sheet",
       "patchHint": "Describe the change. The AI sees this document’s current sheet and your world context, and replies with a patch you review before anything changes.",
       "patchPlaceholder": "make it level 6 and give it a cold aura",
+      "flavorOnly": "Descriptions only",
+      "flavorOnlyHint": "Rewrite flavor text only; the AI gets a shorter prompt without the sheet format",
       "sheetHint": "Describe what to create. The AI writes a Planestone sheet using your world context, and you review the import preview before anything is created.",
       "sheetPlaceholder": "a level 3 kobold trapmaster with a snare-setting reaction",
       "send": "Send",

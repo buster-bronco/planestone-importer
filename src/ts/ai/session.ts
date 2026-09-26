@@ -1,6 +1,6 @@
 import type { ChatMessage } from "./client";
 
-export type ChatSend = (system: string, messages: ChatMessage[]) => Promise<string>;
+export type ChatSend = (system: string[], messages: ChatMessage[]) => Promise<string>;
 // reply → validation errors; empty when the reply is usable
 export type Validate = (reply: string) => Promise<string[]>;
 
@@ -20,7 +20,7 @@ export class AiSession {
   readonly messages: ChatMessage[] = [];
 
   constructor(
-    private system: string,
+    private system: string[],
     private send: ChatSend,
     private validate: Validate,
     private repairs = 1,

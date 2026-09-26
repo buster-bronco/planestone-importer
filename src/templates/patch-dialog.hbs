@@ -24,6 +24,10 @@
         <div class="messages errors"><ul><li>{{aiError}}</li></ul></div>
       {{/if}}
       <textarea name="request" class="paste prose" placeholder="{{localize "planestone-importer.ai.patchPlaceholder"}}" {{#if busy}}disabled{{/if}}>{{request}}</textarea>
+      <label class="hunk flavor-toggle" data-tooltip="{{localize "planestone-importer.ai.flavorOnlyHint"}}">
+        <input type="checkbox" name="flavorOnly" {{#if flavorOnly}}checked{{/if}} {{#if busy}}disabled{{/if}}>
+        <span>{{localize "planestone-importer.ai.flavorOnly"}}</span>
+      </label>
     </div>
     <footer class="buttons">
       <button type="button" data-action="back" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-rotate-left"></i> {{localize "planestone-importer.dialog.back"}}</button>

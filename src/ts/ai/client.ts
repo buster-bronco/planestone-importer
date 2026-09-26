@@ -22,6 +22,11 @@ export const DEFAULT_MODELS: Record<Provider, string> = {
 
 const MAX_TOKENS = 16000;
 
+// system prompt parts → one text block each; cache_control makes each a cache prefix
+function cachedBlocks(system: string[]) {
+  return system.map((text) => ({ type: "text", text, cache_control: { type: "ephemeral" } }));
+}
+
 interface ChatRequest {
   url: string;
   headers: Record<string, string>;
@@ -29,7 +34,7 @@ interface ChatRequest {
 }
 
 // anthropic messages api; the header allows calls straight from the browser
-function anthropicRequest(config: AiConfig, system: string, messages: ChatMessage[]): ChatRequest {
+function anthropicRequest(config: AiConfig, system: string[], messages: ChatMessage[]): ChatRequest {
   return {
     url: "https://api.anthropic.com/v1/messages",
     headers: {
@@ -41,30 +46,29 @@ function anthropicRequest(config: AiConfig, system: string, messages: ChatMessag
     body: {
       model: config.model || DEFAULT_MODELS.anthropic,
       max_tokens: MAX_TOKENS,
-      // cache_control caches the long system prompt between turns
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      system: cachedBlocks(system),
       messages: messages.map(({ role, content }) => ({ role, content })),
     },
   };
 }
 
-// openai chat completions; the system prompt is the first message
-function openaiRequest(config: AiConfig, system: string, messages: ChatMessage[]): ChatRequest {
+// openai chat completions; the system prompt is the first message, cached by prefix automatically
+function openaiRequest(config: AiConfig, system: string[], messages: ChatMessage[]): ChatRequest {
   return {
     url: "https://api.openai.com/v1/chat/completions",
     headers: { "content-type": "application/json", authorization: `Bearer ${config.apiKey}` },
     body: {
       model: config.model || DEFAULT_MODELS.openai,
-      messages: [{ role: "system", content: system }, ...messages.map(({ role, content }) => ({ role, content }))],
+      messages: [{ role: "system", content: system.join("\n\n") }, ...messages.map(({ role, content }) => ({ role, content }))],
     },
   };
 }
 
 // openrouter speaks the openai format; x-title names the app on its dashboard
-function openrouterRequest(config: AiConfig, system: string, messages: ChatMessage[]): ChatRequest {
+function openrouterRequest(config: AiConfig, system: string[], messages: ChatMessage[]): ChatRequest {
   const model = config.model || DEFAULT_MODELS.openrouter;
   // anthropic models only cache with an explicit cache_control block
-  const systemContent = model.startsWith("anthropic/") ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] : system;
+  const systemContent = model.startsWith("anthropic/") ? cachedBlocks(system) : system.join("\n\n");
   return {
     url: "https://openrouter.ai/api/v1/chat/completions",
     headers: { "content-type": "application/json", authorization: `Bearer ${config.apiKey}`, "x-title": "Planestone Importer" },
@@ -75,7 +79,7 @@ function openrouterRequest(config: AiConfig, system: string, messages: ChatMessa
   };
 }
 
-const REQUESTS: Record<Provider, (config: AiConfig, system: string, messages: ChatMessage[]) => ChatRequest> = {
+const REQUESTS: Record<Provider, (config: AiConfig, system: string[], messages: ChatMessage[]) => ChatRequest> = {
   anthropic: anthropicRequest,
   openai: openaiRequest,
   openrouter: openrouterRequest,
@@ -94,7 +98,7 @@ function replyText(provider: Provider, data: any): string {
 // one chat turn → the assistant's reply text
 export async function sendChat(
   config: AiConfig,
-  system: string,
+  system: string[],
   messages: ChatMessage[],
   fetcher: typeof fetch = (...args) => fetch(...args),
 ): Promise<string> {

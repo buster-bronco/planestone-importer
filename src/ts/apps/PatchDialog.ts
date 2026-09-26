@@ -3,7 +3,7 @@ import CONSTANTS from "../constants";
 import { describeActorPatch, describeItemPatch, dumpPatch } from "../ai/describe";
 import { splitReply } from "../ai/extract";
 import { describeHunks, joinPatch, splitPatch, type Hunk, type HunkView, type RawDoc } from "../ai/hunks";
-import { patchSystemPrompt } from "../ai/prompt";
+import { flavorSystemPrompt, patchSystemPrompt } from "../ai/prompt";
 import { AiSession } from "../ai/session";
 import { vocabulary } from "../importer";
 import { executePatch, type PatchResult } from "../patch/apply";
@@ -52,6 +52,8 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
 
   // ai prompting; raw is the ai's patch before any hunk is rejected
   private request = "";
+  // descriptions-only prompt, without the sheet format
+  private flavorOnly = false;
   private correction = "";
   private session: AiSession | null = null;
   private raw: RawDoc | null = null;
@@ -96,6 +98,7 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
       hint: localize(this.isItem ? "patch.itemHint" : "patch.hint"),
       placeholder: this.isItem ? "schemaVersion: 1\nkind: itemPatch\nset:\n  traits: [concentrate]" : "schemaVersion: 1\nkind: actorPatch\nset:\n  core.ac: 23",
       request: this.request,
+      flavorOnly: this.flavorOnly,
       correction: this.correction,
       notes: this.notes,
       aiError: this.aiError,
@@ -119,6 +122,8 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
     bind("patchText", (value) => (this.text = value));
     bind("request", (value) => (this.request = value));
     bind("correction", (value) => (this.correction = value));
+    const flavor = this.element.querySelector("input[name=flavorOnly]") as HTMLInputElement | null;
+    flavor?.addEventListener("change", () => (this.flavorOnly = flavor.checked));
 
     const input = this.element.querySelector("input[type=file]") as HTMLInputElement | null;
     input?.addEventListener("change", async () => {
@@ -239,7 +244,8 @@ export default class PatchDialog extends HandlebarsApplicationMixin(ApplicationV
     const request = this.request;
     const start = async () => {
       const kind = this.isItem ? "itemPatch" : "actorPatch";
-      const system = patchSystemPrompt({ kind, sheet: documentYaml(this.document), context: await worldContext() });
+      const build = this.flavorOnly ? flavorSystemPrompt : patchSystemPrompt;
+      const system = build({ kind, sheet: documentYaml(this.document), context: await worldContext() });
       return new AiSession(system, aiSend(), async (reply) => repairErrors(await this.prepare(splitReply(reply).yaml)));
     };
     await this.runAi(start, (session) => session.ask(request));

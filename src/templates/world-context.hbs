@@ -2,6 +2,7 @@
   <div class="body">
     <p class="hint">{{localize "planestone-importer.worldContext.hint"}}</p>
     <textarea name="contextText" class="paste prose" spellcheck="true" placeholder="{{localize "planestone-importer.worldContext.placeholder"}}">{{text}}</textarea>
+    <p class="hint token-count {{#if overBudget}}over{{/if}}" data-tokens>{{tokens}}</p>
     <div class="context-files">
       <h4>{{localize "planestone-importer.worldContext.files"}}</h4>
       <p class="hint">{{localize "planestone-importer.worldContext.filesHint"}}</p>

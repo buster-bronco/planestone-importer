@@ -5,7 +5,7 @@ import { sendChat, type ChatMessage } from "../src/ts/ai/client";
 import { describeActorPatch, describeItemPatch, dumpPatch } from "../src/ts/ai/describe";
 import { splitReply } from "../src/ts/ai/extract";
 import { describeHunks, hunkText, joinPatch, splitPatch, type RawDoc } from "../src/ts/ai/hunks";
-import { formatSpec, joinContext, patchSystemPrompt, sheetSystemPrompt } from "../src/ts/ai/prompt";
+import { estimateTokens, flavorSystemPrompt, formatSpec, joinContext, patchSystemPrompt, sheetSystemPrompt, SPEC_SECTIONS, specSections, type PromptKind } from "../src/ts/ai/prompt";
 import { AiSession, correctionText } from "../src/ts/ai/session";
 import { buildActorSystem } from "../src/ts/build/actorData";
 import { normalizeOps } from "../src/ts/patch/paths";
@@ -127,7 +127,7 @@ describe("AiSession", () => {
   // replies in order, recording what each call saw
   function fakeSend(replies: string[]) {
     const seen: ChatMessage[][] = [];
-    const send = vi.fn(async (_system: string, messages: ChatMessage[]) => {
+    const send = vi.fn(async (_system: string[], messages: ChatMessage[]) => {
       seen.push(messages.map((message) => ({ ...message })));
       const reply = replies.shift();
       if (reply === undefined) throw new Error("no reply");
@@ -138,7 +138,7 @@ describe("AiSession", () => {
 
   it("asks and keeps the thread", async () => {
     const { send } = fakeSend(["one"]);
-    const session = new AiSession("sys", send, async () => []);
+    const session = new AiSession(["sys"], send, async () => []);
     expect(await session.ask("hi")).toBe("one");
     expect(session.messages).toEqual([
       { role: "user", content: "hi" },
@@ -149,7 +149,7 @@ describe("AiSession", () => {
   it("repairs a failed reply once", async () => {
     const { send, seen } = fakeSend(["bad", "good"]);
     const validate = async (reply: string) => (reply === "bad" ? ["core.ac: expected number"] : []);
-    const session = new AiSession("sys", send, validate);
+    const session = new AiSession(["sys"], send, validate);
     expect(await session.ask("hi")).toBe("good");
     expect(seen[1].at(-1)).toMatchObject({ role: "user", auto: true });
     expect(seen[1].at(-1)!.content).toMatch(/core\.ac: expected number/);
@@ -157,14 +157,14 @@ describe("AiSession", () => {
 
   it("gives up after one repair", async () => {
     const { send } = fakeSend(["bad", "still bad"]);
-    const session = new AiSession("sys", send, async () => ["broken"]);
+    const session = new AiSession(["sys"], send, async () => ["broken"]);
     expect(await session.ask("hi")).toBe("still bad");
     expect(send).toHaveBeenCalledTimes(2);
   });
 
   it("redo drops the last reply and its repair turn", async () => {
     const { send, seen } = fakeSend(["bad", "good", "again"]);
-    const session = new AiSession("sys", send, async (reply) => (reply === "bad" ? ["broken"] : []));
+    const session = new AiSession(["sys"], send, async (reply) => (reply === "bad" ? ["broken"] : []));
     await session.ask("hi");
     expect(await session.redo()).toBe("again");
     expect(seen[2]).toEqual([{ role: "user", content: "hi" }]);
@@ -172,7 +172,7 @@ describe("AiSession", () => {
 
   it("names rejected changes in a correction", async () => {
     const { send, seen } = fakeSend(["one", "two"]);
-    const session = new AiSession("sys", send, async () => []);
+    const session = new AiSession(["sys"], send, async () => []);
     await session.ask("hi");
     await session.correct("also make it fly", ["AC: 21 → 23"]);
     const last = seen[1].at(-1)!.content;
@@ -183,7 +183,7 @@ describe("AiSession", () => {
 
   it("leaves the thread untouched when a call fails", async () => {
     const { send } = fakeSend(["one"]);
-    const session = new AiSession("sys", send, async () => []);
+    const session = new AiSession(["sys"], send, async () => []);
     await session.ask("hi");
     await expect(session.ask("more")).rejects.toThrow("no reply");
     expect(session.messages).toHaveLength(2);
@@ -196,7 +196,7 @@ describe("sendChat", () => {
 
   it("calls anthropic with browser access and a cached system prompt", async () => {
     const fetcher = reply({ content: [{ type: "text", text: "ok" }] });
-    expect(await sendChat({ provider: "anthropic", apiKey: "k", model: "" }, "sys", messages, fetcher)).toBe("ok");
+    expect(await sendChat({ provider: "anthropic", apiKey: "k", model: "" }, ["sys"], messages, fetcher)).toBe("ok");
     const [url, init] = fetcher.mock.calls[0] as any;
     const body = JSON.parse(init.body);
     expect(url).toBe("https://api.anthropic.com/v1/messages");
@@ -204,12 +204,20 @@ describe("sendChat", () => {
     expect(init.headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
     expect(body.model).toBe("claude-sonnet-5");
     expect(body.system[0]).toMatchObject({ text: "sys", cache_control: { type: "ephemeral" } });
+  });
+
+  it("caches each system part as its own anthropic block", async () => {
+    const fetcher = reply({ content: [{ type: "text", text: "ok" }] });
+    await sendChat({ provider: "anthropic", apiKey: "k", model: "" }, ["spec", "lore", "task"], messages, fetcher);
+    const body = JSON.parse((fetcher.mock.calls[0] as any)[1].body);
+    expect(body.system.map((block: any) => block.text)).toEqual(["spec", "lore", "task"]);
+    expect(body.system.every((block: any) => block.cache_control?.type === "ephemeral")).toBe(true);
     expect(body.messages).toEqual([{ role: "user", content: "hi" }]);
   });
 
   it("calls openai with the system prompt first", async () => {
     const fetcher = reply({ choices: [{ message: { content: "ok" } }] });
-    expect(await sendChat({ provider: "openai", apiKey: "k", model: "gpt-x" }, "sys", messages, fetcher)).toBe("ok");
+    expect(await sendChat({ provider: "openai", apiKey: "k", model: "gpt-x" }, ["sys"], messages, fetcher)).toBe("ok");
     const [url, init] = fetcher.mock.calls[0] as any;
     const body = JSON.parse(init.body);
     expect(url).toBe("https://api.openai.com/v1/chat/completions");
@@ -218,9 +226,16 @@ describe("sendChat", () => {
     expect(body.messages[0]).toEqual({ role: "system", content: "sys" });
   });
 
+  it("joins system parts into one openai system message", async () => {
+    const fetcher = reply({ choices: [{ message: { content: "ok" } }] });
+    await sendChat({ provider: "openai", apiKey: "k", model: "" }, ["spec", "task"], messages, fetcher);
+    const body = JSON.parse((fetcher.mock.calls[0] as any)[1].body);
+    expect(body.messages[0]).toEqual({ role: "system", content: "spec\n\ntask" });
+  });
+
   it("calls openrouter, caching the system prompt for anthropic models", async () => {
     const fetcher = reply({ choices: [{ message: { content: "ok" } }] });
-    expect(await sendChat({ provider: "openrouter", apiKey: "k", model: "" }, "sys", messages, fetcher)).toBe("ok");
+    expect(await sendChat({ provider: "openrouter", apiKey: "k", model: "" }, ["sys"], messages, fetcher)).toBe("ok");
     const [url, init] = fetcher.mock.calls[0] as any;
     const body = JSON.parse(init.body);
     expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
@@ -231,40 +246,79 @@ describe("sendChat", () => {
 
   it("sends a plain system prompt to other openrouter models", async () => {
     const fetcher = reply({ choices: [{ message: { content: "ok" } }] });
-    await sendChat({ provider: "openrouter", apiKey: "k", model: "google/gemini-3-pro" }, "sys", messages, fetcher);
+    await sendChat({ provider: "openrouter", apiKey: "k", model: "google/gemini-3-pro" }, ["sys"], messages, fetcher);
     const body = JSON.parse((fetcher.mock.calls[0] as any)[1].body);
     expect(body.messages[0]).toEqual({ role: "system", content: "sys" });
   });
 
   it("surfaces the api error message", async () => {
     const fetcher = reply({ error: { message: "invalid x-api-key" } }, false);
-    await expect(sendChat({ provider: "anthropic", apiKey: "k", model: "" }, "sys", messages, fetcher)).rejects.toThrow("anthropic 401: invalid x-api-key");
+    await expect(sendChat({ provider: "anthropic", apiKey: "k", model: "" }, ["sys"], messages, fetcher)).rejects.toThrow("anthropic 401: invalid x-api-key");
   });
 });
 
 describe("prompts", () => {
   const readme = readFileSync(new URL("../Readme.md", import.meta.url), "utf-8");
+  const sections = specSections(readme);
 
-  it("uses the readme from the sheet format section on", () => {
-    const spec = formatSpec(readme);
-    expect(spec.startsWith("## Planestone sheet format")).toBe(true);
-    expect(spec).toContain("### Patches (`actorPatch`)");
+  it("finds every readme section a prompt kind names", () => {
+    for (const names of Object.values(SPEC_SECTIONS)) for (const name of names) expect(sections.has(name), name).toBe(true);
   });
 
-  it("puts the sheet and world context in the patch prompt", () => {
-    const prompt = patchSystemPrompt({ kind: "actorPatch", sheet: "kind: actor\n", context: "no humans exist" });
-    expect(prompt).toContain("`kind: actorPatch`");
-    expect(prompt).toContain("```yaml\nkind: actor\n```");
-    expect(prompt).toContain("no humans exist");
+  it("sends only the sections for each kind", () => {
+    const spec = (kind: PromptKind) => formatSpec(kind, readme);
+    expect(spec("sheet")).toContain("### Vehicle");
+    expect(spec("sheet")).not.toContain("### Patches");
+    expect(spec("actorPatch")).toContain("### Patches (`actorPatch`)");
+    expect(spec("actorPatch")).not.toContain("### Hazard");
+    expect(spec("itemPatch")).toContain("### Item patches");
+    expect(spec("itemPatch")).not.toContain("### Actor");
+    for (const kind of Object.keys(SPEC_SECTIONS) as PromptKind[]) {
+      expect(spec(kind)).not.toContain("### Copy sheet");
+      expect(spec(kind)).not.toContain("## Batch behaviour");
+    }
   });
 
-  it("joins the context text and files", () => {
-    const files = [{ path: "worlds/w/notes/species.md", content: "no humans\n" }];
-    expect(joinContext(" kobolds rule ", files)).toBe("kobolds rule\n\n## species.md\n\nno humans");
-    expect(joinContext("", files)).toBe("## species.md\n\nno humans");
+  it("orders the patch prompt spec, context, then sheet", () => {
+    const parts = patchSystemPrompt({ kind: "actorPatch", sheet: "kind: actor\n", context: "no humans exist" });
+    expect(parts).toHaveLength(3);
+    expect(parts[0]).toContain("# Format reference");
+    expect(parts[1]).toContain("no humans exist");
+    expect(parts[2]).toContain("`kind: actorPatch`");
+    expect(parts[2]).toContain("```yaml\nkind: actor\n```");
+  });
+
+  it("frames the world context as background", () => {
+    const [, world] = sheetSystemPrompt({ context: "kobolds rule" });
+    expect(world).toMatch(/Background on the GM's setting/);
+    expect(world).not.toMatch(/Follow them/);
   });
 
   it("skips an empty world context", () => {
-    expect(sheetSystemPrompt({ context: "  " })).not.toContain("# World context");
+    const parts = sheetSystemPrompt({ context: "  " });
+    expect(parts).toHaveLength(2);
+    expect(parts.join("")).not.toContain("# World context");
+  });
+
+  it("keeps the flavor prompt free of the sheet format", () => {
+    const prompt = flavorSystemPrompt({ kind: "itemPatch", sheet: "kind: item\n", context: "" }).join("\n");
+    expect(prompt).toContain("### Links in descriptions");
+    expect(prompt).not.toContain("### Envelope");
+    expect(prompt).not.toContain("### Items");
+    expect(prompt).toContain("kind: itemPatch\nset:\n  description:");
+  });
+
+  it("tags the context text and files", () => {
+    const files = [{ path: "worlds/w/notes/species.md", content: "no humans\n" }];
+    expect(joinContext(" kobolds rule ", files)).toBe(
+      '<world_context>\n<note source="gm">\nkobolds rule\n</note>\n<document source="species.md">\nno humans\n</document>\n</world_context>',
+    );
+    expect(joinContext("", files)).not.toContain("<note");
+    expect(joinContext(" ", [])).toBe("");
+  });
+
+  it("estimates tokens at four characters each", () => {
+    expect(estimateTokens("abcdefgh")).toBe(2);
+    expect(estimateTokens("abcde")).toBe(2);
   });
 });

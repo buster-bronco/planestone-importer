@@ -1,8 +1,8 @@
 import CONSTANTS from "./constants";
 import WorldContextDialog from "./apps/WorldContextDialog";
 import { sendChat, type AiConfig, type ChatMessage, type Provider } from "./ai/client";
-import { joinContext } from "./ai/prompt";
-import { getGame, isCurrentUserGM } from "./utils";
+import { estimateTokens, joinContext } from "./ai/prompt";
+import { getGame, isCurrentUserGM, localize } from "./utils";
 
 const ID = CONSTANTS.MODULE_ID;
 const key = (name: string) => `${ID}.settings.${name}`;
@@ -77,7 +77,7 @@ function worldContextFiles(): string[] {
   return (getGame().settings.get(ID, "aiWorldContextFiles") as string[]) ?? [];
 }
 
-// the text box plus every listed file; a missing file fails the prompt
+// the text box plus every listed file; a missing file fails the prompt, a large one warns
 export async function worldContext(): Promise<string> {
   const files = await Promise.all(
     worldContextFiles().map(async (path) => {
@@ -86,11 +86,14 @@ export async function worldContext(): Promise<string> {
       return { path, content: await response.text() };
     }),
   );
-  return joinContext(worldContextText(), files);
+  const context = joinContext(worldContextText(), files);
+  const tokens = estimateTokens(context);
+  if (tokens > CONSTANTS.CONTEXT_WARN_TOKENS) ui.notifications.warn(`${localize("notify.contextLarge")} (~${tokens} tokens)`);
+  return context;
 }
 
 // chat sender bound to the current settings
-export function aiSend(): (system: string, messages: ChatMessage[]) => Promise<string> {
+export function aiSend(): (system: string[], messages: ChatMessage[]) => Promise<string> {
   return (system, messages) => {
     const config = aiConfig();
     if (!config) throw new Error("no ai provider or api key set");
