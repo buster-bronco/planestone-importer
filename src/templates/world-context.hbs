@@ -1,0 +1,26 @@
+<section class="npc-importer">
+  <div class="body">
+    <p class="hint">{{localize "planestone-importer.worldContext.hint"}}</p>
+    <textarea name="contextText" class="paste prose" spellcheck="true" placeholder="{{localize "planestone-importer.worldContext.placeholder"}}">{{text}}</textarea>
+    <div class="context-files">
+      <h4>{{localize "planestone-importer.worldContext.files"}}</h4>
+      <p class="hint">{{localize "planestone-importer.worldContext.filesHint"}}</p>
+      {{#if files.length}}
+        <ul>
+          {{#each files}}
+            <li>
+              <code>{{path}}</code>
+              <a data-action="removeFile" data-index="{{index}}" data-tooltip="{{localize "planestone-importer.worldContext.remove"}}"><i class="fa-solid fa-trash"></i></a>
+            </li>
+          {{/each}}
+        </ul>
+      {{else}}
+        <p class="empty">{{localize "planestone-importer.worldContext.noFiles"}}</p>
+      {{/if}}
+    </div>
+  </div>
+  <footer class="buttons">
+    <button type="button" data-action="addFile"><i class="fa-solid fa-file-circle-plus"></i> {{localize "planestone-importer.worldContext.addFile"}}</button>
+    <button type="button" data-action="save"><i class="fa-solid fa-floppy-disk"></i> {{localize "planestone-importer.worldContext.save"}}</button>
+  </footer>
+</section>

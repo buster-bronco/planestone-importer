@@ -44,7 +44,19 @@ const { plan, results } = await api.importText(yamlString, { folderId: null, ite
 api.openPatchDialog(actorOrItem);
 const { plan, result } = await api.applyPatch(actor, patchYaml); // actor document or uuid
 const { plan, result } = await api.applyItemPatch(item, itemPatchYaml); // world item document or uuid
+const { plan, text, notes } = await api.promptPatch(actorOrItem, "make it level 6"); // ai patch, prepared but not applied
+const { plan, text, notes } = await api.promptSheet("a level 3 kobold trapmaster"); // ai sheet, prepared but not imported
 ```
+
+## AI prompting (optional)
+
+Set **AI provider** (Claude or OpenAI) and **AI API key** in the module settings. Until both are set, none of the AI buttons show. The provider, key and model are client settings: they stay in your browser and are never saved to the world.
+
+- **Prompt Patch** (Patch dialog): describe a change. The AI gets the document's current sheet (the same YAML as **Copy sheet**) and replies with a patch. Each change is a checkbox; untick the ones you don't want, and the change list below updates to show what **Apply** will do. **Send correction** continues the conversation and tells the AI which changes you rejected. **Redo** asks the same thing again. **Edit YAML** opens the patch in the normal editor.
+- **Prompt Sheet** (Import dialog): describe something new. The AI writes a full sheet, and it goes through the normal import preview. **Refine** sends a follow-up, and **Redo** asks again.
+- **World context** (module settings → **Edit world context**): setting notes sent with every prompt, e.g. "humans don't exist; kobolds are the dominant species". Type them in the text box, add `.md`/`.txt` files from the Foundry data folder, or both. Files are read fresh on every prompt, so you can keep editing them in another editor, and a missing file stops the prompt with an error. The notes and the file list are client settings, so they stay in your browser and players never receive them. (Foundry sends world and user settings to every client, so neither is private.) The files themselves are served by Foundry to anyone who knows their path, so keep secret notes in an out-of-the-way folder.
+
+Every prompt also includes the sheet format section of this readme. If a reply doesn't validate, the errors are sent back to the AI once automatically. Everything in a prompt is sent to the provider you picked: the sheet, your request and the world context.
 
 ## Planestone sheet format (v1)
 

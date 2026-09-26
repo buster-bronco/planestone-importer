@@ -1,10 +1,14 @@
 import CONSTANTS from "../constants";
+import { splitReply } from "../ai/extract";
+import { sheetSystemPrompt } from "../ai/prompt";
+import { AiSession } from "../ai/session";
 import { executeImport, folderOptions, prepareImport, type ImportPlan, type ImportResult } from "../importer";
+import { aiEnabled, aiSend, worldContext } from "../settings";
 import { localize } from "../utils";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
-type Stage = "pick" | "preview" | "results";
+type Stage = "pick" | "prompt" | "preview" | "results";
 
 export default class ImportDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
@@ -17,6 +21,10 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       import: ImportDialog.onImport,
       reset: ImportDialog.onReset,
       loadText: ImportDialog.onLoadText,
+      prompt: ImportDialog.onPrompt,
+      send: ImportDialog.onSend,
+      redo: ImportDialog.onRedo,
+      refine: ImportDialog.onRefine,
     },
   };
 
@@ -36,6 +44,14 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
   private itemFolderId = "";
   // folder document hooks, registered while the dialog is open
   private folderHooks: [string, number][] = [];
+  // ai prompting; the session lives until the gm goes back or imports
+  private request = "";
+  private refinement = "";
+  private session: AiSession | null = null;
+  private notes = "";
+  private aiError = "";
+  // busy waiting on the ai, not importing
+  private thinking = false;
 
   async _prepareContext() {
     const plan = this.plan;
@@ -44,9 +60,17 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       itemFolders: folderOptions("Item").map((folder) => ({ ...folder, selected: folder.id === this.itemFolderId })),
       stage: this.stage,
       isPick: this.stage === "pick",
+      isPrompt: this.stage === "prompt",
+      aiEnabled: aiEnabled(),
+      hasSession: !!this.session,
+      request: this.request,
+      refinement: this.refinement,
+      notes: this.notes,
+      aiError: this.aiError,
       isPreview: this.stage === "preview",
       isResults: this.stage === "results",
       busy: this.busy,
+      importing: this.busy && !this.thinking,
       fileName: this.fileName,
       pasted: this.pasted,
       errors: plan?.errors ?? [],
@@ -92,6 +116,10 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     });
     const textarea = this.element.querySelector("textarea[name=sheetText]") as HTMLTextAreaElement | null;
     textarea?.addEventListener("input", () => (this.pasted = textarea.value));
+    const request = this.element.querySelector("textarea[name=request]") as HTMLTextAreaElement | null;
+    request?.addEventListener("input", () => (this.request = request.value));
+    const refinement = this.element.querySelector("textarea[name=refinement]") as HTMLTextAreaElement | null;
+    refinement?.addEventListener("input", () => (this.refinement = refinement.value));
     const folderSelect = this.element.querySelector("select[name=folder]") as HTMLSelectElement | null;
     folderSelect?.addEventListener("change", () => (this.folderId = folderSelect.value));
     const itemFolderSelect = this.element.querySelector("select[name=itemFolder]") as HTMLSelectElement | null;
@@ -156,6 +184,7 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
     this.results = await executeImport(this.plan, { folderId: this.folderId || null, itemFolderId: this.itemFolderId || null });
     this.busy = false;
     this.stage = "results";
+    this.clearSession();
     const created = this.results.filter((result) => result.ok).length;
     ui.notifications.info(`${localize("notify.imported")}: ${created}/${this.results.length}`);
     await this.render();
@@ -168,10 +197,76 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
   }
 
   static async onReset(this: ImportDialog) {
+    this.clearSession();
+    this.aiError = "";
     this.stage = "pick";
     this.plan = null;
     this.results = [];
     this.fileName = "";
     await this.render();
+  }
+
+  // --- ai prompting -----------------------------------------------------------
+
+  private clearSession() {
+    this.session = null;
+    this.notes = "";
+    this.refinement = "";
+  }
+
+  static async onPrompt(this: ImportDialog) {
+    if (this.busy) return;
+    this.clearSession();
+    this.aiError = "";
+    this.stage = "prompt";
+    await this.render();
+  }
+
+  static async onSend(this: ImportDialog) {
+    if (this.busy || !this.request.trim()) return;
+    const validate = async (reply: string) => (await prepareImport(splitReply(reply).yaml)).errors;
+    const request = this.request;
+    const start = async () => new AiSession(sheetSystemPrompt({ context: await worldContext() }), aiSend(), validate);
+    await this.runAi(start, (session) => session.ask(request));
+  }
+
+  static async onRedo(this: ImportDialog) {
+    const session = this.session;
+    if (this.busy || !session) return;
+    await this.runAi(async () => session, (session) => session.redo());
+  }
+
+  static async onRefine(this: ImportDialog) {
+    const session = this.session;
+    if (this.busy || !session || !this.refinement.trim()) return;
+    const refinement = this.refinement;
+    await this.runAi(async () => session, (session) => session.ask(refinement));
+  }
+
+  // the reply's yaml goes through the same load path as pasted text
+  private async runAi(start: () => Promise<AiSession>, call: (session: AiSession) => Promise<string>) {
+    this.busy = this.thinking = true;
+    this.aiError = "";
+    await this.render();
+    let reply: string;
+    let session: AiSession;
+    try {
+      session = await start();
+      reply = await call(session);
+    } catch (err) {
+      console.error(CONSTANTS.DEBUG_PREFIX, err);
+      this.aiError = (err as Error).message;
+      this.busy = this.thinking = false;
+      await this.render();
+      return;
+    }
+    const { yaml, notes } = splitReply(reply);
+    this.session = session;
+    this.notes = notes;
+    this.refinement = "";
+    // back → pick shows the sheet for hand edits
+    this.pasted = yaml;
+    await this.load(localize("ai.generated"), async () => yaml);
+    this.thinking = false;
   }
 }

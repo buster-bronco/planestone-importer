@@ -218,7 +218,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 // nested objects expand into dotted paths until a known path is hit
-function flattenSet(set: Record<string, unknown>, prefix = ""): [string, unknown][] {
+export function flattenSet(set: Record<string, unknown>, prefix = ""): [string, unknown][] {
   const out: [string, unknown][] = [];
   for (const [key, value] of Object.entries(set)) {
     const path = prefix ? `${prefix}.${key}` : key;

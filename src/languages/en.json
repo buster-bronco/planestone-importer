@@ -35,7 +35,8 @@
       "patched": "NPC patched",
       "patchFailed": "Patch failed, changes rolled back",
       "itemPatched": "Item patched",
-      "copied": "Sheet copied to clipboard"
+      "copied": "Sheet copied to clipboard",
+      "contextSaved": "World context saved"
     },
     "sheet": {
       "patch": "Patch"
@@ -55,6 +56,61 @@
       "itemHint": "Paste a Planestone item patch (kind: itemPatch) or load one from a file. Nothing changes until you apply the preview.",
       "copySheet": "Copy sheet",
       "copySheetHint": "Copy this document's current Planestone sheet (YAML) to the clipboard"
+    },
+    "settings": {
+      "aiProvider": {
+        "name": "AI provider",
+        "hint": "Turns on Prompt Patch and Prompt Sheet. Stored in this browser only.",
+        "none": "Off",
+        "anthropic": "Claude (Anthropic)",
+        "openai": "OpenAI"
+      },
+      "aiApiKey": {
+        "name": "AI API key",
+        "hint": "Your Anthropic or OpenAI key. Stored in this browser only and sent only to the chosen provider."
+      },
+      "aiModel": {
+        "name": "AI model",
+        "hint": "Model id. Leave blank for the default (claude-sonnet-5 or gpt-5)."
+      },
+      "aiWorldContext": {
+        "name": "AI world context",
+        "label": "Edit world context",
+        "hint": "Setting notes and files sent with every AI prompt. Stored in this browser only, so players never receive them."
+      }
+    },
+    "worldContext": {
+      "title": "AI World Context",
+      "hint": "Notes about your setting, sent with every Prompt Patch and Prompt Sheet request. For example: humans don’t exist; kobolds are the dominant species. Saved in this browser only; players never receive it.",
+      "placeholder": "# My world\n\n- no humans; kobolds and lizardfolk run the cities\n- iron is rare, most weapons are bone or bronze",
+      "save": "Save",
+      "files": "Context files",
+      "filesHint": ".md or .txt files from the Foundry data folder, read fresh on every prompt. Foundry serves that folder to anyone who knows the path, so keep secret notes in an out-of-the-way folder.",
+      "noFiles": "No files added.",
+      "addFile": "Add file…",
+      "remove": "Remove"
+    },
+    "ai": {
+      "promptPatch": "Prompt Patch",
+      "promptSheet": "Prompt Sheet",
+      "patchHint": "Describe the change. The AI sees this document’s current sheet and your world context, and replies with a patch you review before anything changes.",
+      "patchPlaceholder": "make it level 6 and give it a cold aura",
+      "sheetHint": "Describe what to create. The AI writes a Planestone sheet using your world context, and you review the import preview before anything is created.",
+      "sheetPlaceholder": "a level 3 kobold trapmaster with a snare-setting reaction",
+      "send": "Send",
+      "thinking": "Thinking…",
+      "hunks": "Proposed changes — untick to reject",
+      "correctionPlaceholder": "Correction or follow-up (optional when you only rejected changes)",
+      "refinePlaceholder": "Follow-up: what to change in this sheet",
+      "newPrompt": "New prompt",
+      "newPromptHint": "Start over with a new request",
+      "redo": "Redo",
+      "redoHint": "Ask the same thing again",
+      "correct": "Send correction",
+      "correctHint": "Send the follow-up; rejected changes are listed for the AI",
+      "refine": "Refine",
+      "editYaml": "Edit YAML",
+      "generated": "AI sheet"
     }
   }
 }
