@@ -4,7 +4,7 @@ import { PackIndex } from "../packIndex";
 import { newReview, type ReviewOptions, type Suggestion, type TextFix } from "../review";
 import { parseSheetText } from "../parse";
 import type { ItemPatchDoc } from "../schema";
-import { fieldGroups, itemFieldUpdate, runeUpdate } from "./itemFields";
+import { fieldGroups, itemFieldUpdate, rawFieldUpdate, runeUpdate } from "./itemFields";
 import { targetMismatch } from "./prepare";
 import { conditionLintEnabled } from "../utils";
 
@@ -67,7 +67,7 @@ export function buildItemPatchChanges(doc: ItemPatchDoc, source: ItemSource): It
   const groups = fieldGroups(fields);
   const type = source.type;
 
-  if (![...groups.weapon, ...groups.action, ...groups.strike, ...groups.common].length) errors.push("set: nothing to change");
+  if (![...groups.weapon, ...groups.action, ...groups.strike, ...groups.common, ...groups.raw].length) errors.push("set: nothing to change");
   const strikeOnly = groups.weapon.filter((key) => key !== "runes");
   if (strikeOnly.length) errors.push(`set: ${strikeOnly.join(", ")} only apply to npc strikes; patch them from the actor`);
   if (groups.weapon.includes("runes") && type !== "weapon") errors.push(`set: runes need a weapon, but this is a ${type} item`);
@@ -76,7 +76,12 @@ export function buildItemPatchChanges(doc: ItemPatchDoc, source: ItemSource): It
   if (fields.trigger && fields.description === undefined) errors.push("set: trigger needs description in the same set");
   if (errors.length) return result;
 
-  Object.assign(result.update, itemFieldUpdate(source, fields), runeUpdate(fields));
+  const raw = rawFieldUpdate(source, fields);
+  if (raw.errors.length) {
+    errors.push(...raw.errors);
+    return result;
+  }
+  Object.assign(result.update, itemFieldUpdate(source, fields), runeUpdate(fields), raw.update);
 
   const system = source.system ?? {};
   const diff = (label: string, before: unknown, after: unknown) => {
@@ -94,6 +99,7 @@ export function buildItemPatchChanges(doc: ItemPatchDoc, source: ItemSource): It
   if (fields.description !== undefined && result.update["system.description.value"] !== system.description?.value) {
     changes.push(fields.trigger ? "trigger and description rewritten" : "description rewritten");
   }
+  changes.push(...raw.changes);
   return result;
 }
 

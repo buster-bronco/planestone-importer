@@ -1,6 +1,7 @@
 import { reactionHtml, toHtml } from "../build/homebrew";
 import type { ItemPatchFields } from "../schema";
 import { randomID, sluggify } from "../slug";
+import { isSystemPath, rulesUpdate, systemPathUpdate, type SystemPathResult } from "./systemPaths";
 
 export const WEAPON_FIELDS = ["proficiency", "runes", "abilityOverride", "damageAbilityOverride"] as const;
 export const ACTION_FIELDS = ["actionType", "category", "trigger"] as const;
@@ -10,10 +11,23 @@ export const COMMON_FIELDS = ["name", "description", "traits"] as const;
 // item types that carry a slug made from their name
 const SLUGGED_TYPES = new Set(["action", "melee"]);
 
-// fields present in a patch set, per group
+// fields present in a patch set, per group; raw is rules and system.* paths, fine on any item type
 export function fieldGroups(fields: ItemPatchFields) {
   const has = (keys: readonly string[]) => keys.filter((key) => key in fields);
-  return { weapon: has(WEAPON_FIELDS), action: has(ACTION_FIELDS), strike: has(STRIKE_FIELDS), common: has(COMMON_FIELDS) };
+  const raw = Object.keys(fields).filter((key) => key === "rules" || isSystemPath(key));
+  return { weapon: has(WEAPON_FIELDS), action: has(ACTION_FIELDS), strike: has(STRIKE_FIELDS), common: has(COMMON_FIELDS), raw };
+}
+
+// rules and system.* paths → update, change lines, errors
+export function rawFieldUpdate(item: any, fields: ItemPatchFields): SystemPathResult {
+  const result = systemPathUpdate(item, fields);
+  if (fields.rules) {
+    const rules = rulesUpdate(item, fields.rules);
+    Object.assign(result.update, rules.update);
+    result.changes.push(...rules.changes);
+    result.errors.push(...rules.errors);
+  }
+  return result;
 }
 
 // common, action and strike fields → flat-keyed foundry update for one item

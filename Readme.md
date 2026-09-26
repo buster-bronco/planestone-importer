@@ -483,6 +483,23 @@ set:
 - actions: `actionType`, `category`, `trigger` (needs `description` in the same `set`)
 - weapons: `runes`
 - `proficiency`, `abilityOverride` and `damageAbilityOverride` only affect NPC strikes, so they're errors here
+- any item: raw `system.*` paths and `rules` (below)
+
+**Raw paths** reach any field of any item type. **Copy sheet** on a world item lists the item's paths as comments.
+
+```yaml
+set:
+  system.level.value: 3
+  system.price.value.gp: 40
+  rules:                          # replaces the item's whole rule element list
+    - { key: FlatModifier, selector: ac, type: item, value: 1 }
+```
+
+- A path must already exist on the item, or be a new key next to real ones (`price.value.gp` when only `sp` is set). A typo gets a suggestion: `no system.levle.value; did you mean system.level.value?`
+- The value's type has to match what's there (number, string, boolean, array, object); `null` clears it.
+- Paths with their own field are errors pointing at it: `system.description` → `description`, `system.traits.value` → `traits`, and likewise `rules`, `runes`, `actionType`, `category`, `attackBonus`, `damageRolls`, `attackEffects` and the slug.
+- Each rule needs a `key`; in Foundry it's checked against pf2e's rule elements.
+- In an actor patch's `items.update`, a `set` with only raw fields matches any item type; typed fields still only match actions and strikes.
 
 Renaming an action changes its slug too. Renaming a compendium item (weapon, spell, equipment) keeps its slug so rule elements that point at it keep working. The whole patch is a single `item.update()`, so a failure leaves the item unchanged.
 

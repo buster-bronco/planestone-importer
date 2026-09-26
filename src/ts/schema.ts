@@ -1,3 +1,4 @@
+import { rank } from "./fuzzy";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -546,8 +547,11 @@ const patchTarget = z
   .strict()
   .refine((target) => !(target.name && target.uuid), "target takes a name or a uuid, not both");
 
+// a pf2e rule element; key picks the kind, the rest is that kind's data
+const ruleElement = z.object({ key: z.string().min(1) }).passthrough();
+
 // every field items.update can touch; which ones apply depends on the matched item
-export const itemPatchFields = z
+const itemPatchShape = z
   .object({
     name: z.string().min(1),
     description: z.string(),
@@ -562,9 +566,20 @@ export const itemPatchFields = z
     runes: runes.partial(),
     abilityOverride: abilityKey.nullable(),
     damageAbilityOverride: abilityKey.nullable(),
+    rules: z.array(ruleElement),
   })
-  .partial()
-  .strict();
+  .partial();
+
+const ITEM_PATCH_KEYS = Object.keys(itemPatchShape.shape);
+
+// typed fields plus raw system.* paths, checked against the item in patch/systemPaths.ts
+export const itemPatchFields = itemPatchShape.catchall(z.unknown()).superRefine((fields, ctx) => {
+  for (const key of Object.keys(fields)) {
+    if (ITEM_PATCH_KEYS.includes(key) || /^system\.\w/.test(key)) continue;
+    const near = rank(key, ITEM_PATCH_KEYS.map((name) => ({ name })), { limit: 1, min: 0.5 });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `unknown field${near.length ? `; did you mean ${near[0].name}?` : ""} (raw paths start with system.)` });
+  }
+});
 
 export type ItemPatchFields = z.infer<typeof itemPatchFields>;
 
