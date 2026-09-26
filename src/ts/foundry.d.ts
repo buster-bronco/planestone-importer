@@ -11,3 +11,7 @@ declare function fromUuid(uuid: string): Promise<any>;
 declare function fromUuidSync(uuid: string): any;
 
 declare module "*.scss";
+declare module "*?raw" {
+  const text: string;
+  export default text;
+}

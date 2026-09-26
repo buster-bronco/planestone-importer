@@ -4,6 +4,7 @@ import { formatSense } from "./build/actorData";
 import type { StrikeFlag } from "./build/strikeMath";
 import type { ActorSource } from "./patch/paths";
 import type { ItemSource } from "./patch/item";
+import { rawPathLines } from "./patch/systemPaths";
 
 // compendium uuid → that entry's name, e.g. via fromUuidSync
 export type SourceName = (uuid: string) => string | undefined;
@@ -12,11 +13,13 @@ export interface SheetExport {
   sheet: Record<string, unknown>;
   // items with no sheet form, noted as yaml comments
   skipped: string[];
+  // trailing yaml comments, e.g. an item's raw system paths
+  notes?: string[];
 }
 
 const SIZE_NAMES: Record<string, string> = { tiny: "tiny", sm: "small", med: "medium", lg: "large", huge: "huge", grg: "gargantuan" };
 
-const REFTYPE_BY_ITEM: Record<string, "action" | "equipment" | "spell"> = {
+const REFTYPE_BY_ITEM: Record<string, "action" | "equipment" | "spell" | "feat" | "effect"> = {
   action: "action",
   spell: "spell",
   weapon: "equipment",
@@ -27,6 +30,8 @@ const REFTYPE_BY_ITEM: Record<string, "action" | "equipment" | "spell"> = {
   treasure: "equipment",
   backpack: "equipment",
   ammo: "equipment",
+  feat: "feat",
+  effect: "effect",
 };
 
 // _stats.compendiumSource is v12+; flags.core.sourceId is the older spot
@@ -253,12 +258,25 @@ export function exportActor(source: ActorSource & { flags?: any }, sourceName: S
 // world item data → kind: item sheet
 export function exportItem(source: ItemSource & { flags?: any; _stats?: any }, sourceName: SourceName = () => undefined): SheetExport {
   const entry = exportSheetItem(source, sourceName);
-  if (!entry) return { sheet: { schemaVersion: 1, kind: "item" }, skipped: [`${source.name} (${source.type})`] };
-  return { sheet: { schemaVersion: 1, kind: "item", ...entry }, skipped: [] };
+  const notes = itemNotes(source);
+  if (!entry) return { sheet: { schemaVersion: 1, kind: "item" }, skipped: [`${source.name} (${source.type})`], notes };
+  return { sheet: { schemaVersion: 1, kind: "item", ...entry }, skipped: [], notes };
+}
+
+// patchable paths and rule elements, as comments so the sheet still re-imports
+function itemNotes(source: ItemSource): string[] {
+  const rules: unknown[] = source.system?.rules ?? [];
+  return [
+    "itemPatch set also takes these raw paths, e.g. set: { system.level.value: 2 }",
+    ...rawPathLines(source.system),
+    `rules (replace the whole list with set: { rules: [...] }): ${rules.length ? "" : "none"}`,
+    ...rules.map((rule) => `  - ${JSON.stringify(rule)}`),
+  ];
 }
 
 // yaml text, with skipped items listed on top
-export function exportYaml({ sheet, skipped }: SheetExport): string {
-  const notes = skipped.map((text) => `# not exported: ${text}\n`).join("");
-  return notes + yaml.dump(sheet, { lineWidth: -1, noRefs: true });
+export function exportYaml({ sheet, skipped, notes = [] }: SheetExport): string {
+  const header = skipped.map((text) => `# not exported: ${text}\n`).join("");
+  const footer = notes.map((text) => `# ${text}\n`).join("");
+  return header + yaml.dump(sheet, { lineWidth: -1, noRefs: true }) + (footer ? `\n${footer}` : "");
 }

@@ -4,7 +4,7 @@ import { computeStrike, type StrikeFlag, type StrikeStats } from "../build/strik
 import { classifyAttackEffect } from "../parse";
 import { isHomebrewAction, isHomebrewStrike, type AbilityKey, type ActorPatchDoc, type SheetItem } from "../schema";
 import { sluggify } from "../slug";
-import { fieldGroups, itemFieldUpdate, runeUpdate } from "./itemFields";
+import { fieldGroups, itemFieldUpdate, rawFieldUpdate, runeUpdate } from "./itemFields";
 import { LIST_PATHS, loreKey, normalizeOps, type ActorSource, type ListSpec, type PathContext } from "./paths";
 
 export interface PatchChanges {
@@ -222,7 +222,7 @@ export function buildPatchChanges(doc: ActorPatchDoc, source: ActorSource, vocab
 
   doc.items.update.forEach(({ match, set: fields }, index) => {
     const where = `items.update.${index}`;
-    const { weapon: weaponKeys, action: actionKeys, strike: strikeKeys, common: commonKeys } = fieldGroups(fields);
+    const { weapon: weaponKeys, action: actionKeys, strike: strikeKeys, common: commonKeys, raw: rawKeys } = fieldGroups(fields);
     const hits = byName(match);
     const wanted = match.trim().toLowerCase();
 
@@ -244,7 +244,7 @@ export function buildPatchChanges(doc: ActorPatchDoc, source: ActorSource, vocab
       for (const weapon of hits.filter((item) => item.type === "weapon")) Object.assign(updateFor(weapon._id), runeUpdate(fields));
     }
 
-    if (!actionKeys.length && !strikeKeys.length && !commonKeys.length) {
+    if (!actionKeys.length && !strikeKeys.length && !commonKeys.length && !rawKeys.length) {
       if (!weaponKeys.length) errors.push(`${where}: nothing to change`);
       return;
     }
@@ -252,10 +252,12 @@ export function buildPatchChanges(doc: ActorPatchDoc, source: ActorSource, vocab
       errors.push(`${where}: ${actionKeys.join(", ")} and ${strikeKeys.join(", ")} can't apply to the same item`);
       return;
     }
+    // raw-only edits reach any item type; typed fields keep to actions and strikes
+    const rawOnly = !actionKeys.length && !strikeKeys.length && !commonKeys.length;
     const types = actionKeys.length ? ["action"] : strikeKeys.length ? ["melee"] : ["action", "melee"];
-    const targets = hits.filter((item) => types.includes(item.type));
+    const targets = rawOnly ? hits : hits.filter((item) => types.includes(item.type));
     if (!targets.length) {
-      errors.push(`${where}: no ${types.join(" or ")} item named "${match}"`);
+      errors.push(rawOnly ? `${where}: no item named "${match}"` : `${where}: no ${types.join(" or ")} item named "${match}"`);
       return;
     }
     if (fields.trigger && fields.description === undefined) {
@@ -264,8 +266,15 @@ export function buildPatchChanges(doc: ActorPatchDoc, source: ActorSource, vocab
     }
 
     for (const item of targets) {
-      Object.assign(updateFor(item._id), itemFieldUpdate(item, fields));
-      changes.push(`~ ${item.name}: ${[...commonKeys, ...actionKeys, ...strikeKeys].join(", ")}`);
+      const raw = rawFieldUpdate(item, fields);
+      if (raw.errors.length) {
+        errors.push(...raw.errors.map((error) => `${where}: ${error.replace(/^set: /, "")}`));
+        continue;
+      }
+      Object.assign(updateFor(item._id), itemFieldUpdate(item, fields), raw.update);
+      const typed = [...commonKeys, ...actionKeys, ...strikeKeys];
+      if (typed.length) changes.push(`~ ${item.name}: ${typed.join(", ")}`);
+      changes.push(...raw.changes.map((change) => `~ ${item.name}: ${change}`));
     }
   });
 

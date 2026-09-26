@@ -5,6 +5,8 @@ export const CONSTANTS = {
   MODULE_NAME: "Planestone Importer",
   DEBUG_PREFIX: "PLANESTONE-IMPORTER:",
   SUPPORTED_SCHEMA_VERSION: 1,
+  // estimated tokens of world context before prompts warn
+  CONTEXT_WARN_TOKENS: 8000,
 
   // pack search order per refType, first hit wins
   PACKS_BY_REF_TYPE: {
@@ -16,6 +18,8 @@ export const CONSTANTS = {
     ],
     equipment: ["pf2e.equipment-srd"],
     spell: ["pf2e.spells-srd"],
+    feat: ["pf2e.feats-srd"],
+    effect: ["pf2e.spell-effects", "pf2e.equipment-effects", "pf2e.feat-effects", "pf2e.other-effects"],
   },
 
   // packs searched for [[term]] marks

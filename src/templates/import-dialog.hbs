@@ -11,13 +11,65 @@
       <textarea name="sheetText" class="paste" spellcheck="false" placeholder="schemaVersion: 1&#10;kind: actor&#10;meta: { name: …, level: 1 }" {{#if busy}}disabled{{/if}}>{{pasted}}</textarea>
     </div>
     <footer class="buttons">
+      {{#if aiEnabled}}
+        <button type="button" data-action="prompt" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-wand-magic-sparkles"></i> {{localize "planestone-importer.ai.promptSheet"}}</button>
+      {{/if}}
       <button type="button" data-action="loadText" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-paste"></i> {{localize "planestone-importer.dialog.loadText"}}</button>
+    </footer>
+  {{/if}}
+
+  {{#if isPrompt}}
+    <div class="body">
+      <p class="hint">{{localize "planestone-importer.ai.sheetHint"}}</p>
+      {{#if aiError}}
+        <div class="messages errors"><ul><li>{{aiError}}</li></ul></div>
+      {{/if}}
+      <textarea name="request" class="paste prose" placeholder="{{localize "planestone-importer.ai.sheetPlaceholder"}}" {{#if busy}}disabled{{/if}}>{{request}}</textarea>
+    </div>
+    <footer class="buttons">
+      <button type="button" data-action="reset" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-rotate-left"></i> {{localize "planestone-importer.dialog.back"}}</button>
+      <button type="button" data-action="send" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-paper-plane"></i> {{#if busy}}{{localize "planestone-importer.ai.thinking"}}{{else}}{{localize "planestone-importer.ai.send"}}{{/if}}</button>
     </footer>
   {{/if}}
 
   {{#if isPreview}}
     <div class="body">
       <h3 class="file-name">{{fileName}}</h3>
+      {{#if aiError}}
+        <div class="messages errors"><ul><li>{{aiError}}</li></ul></div>
+      {{/if}}
+      {{#if notes}}<p class="ai-notes">{{notes}}</p>{{/if}}
+
+      <div class="hunks text-fixes">
+        <label class="hunk lint-toggle" data-tooltip="{{localize "planestone-importer.review.lintHint"}}">
+          <input type="checkbox" data-lint {{#if review.lint}}checked{{/if}} {{#if busy}}disabled{{/if}}>
+          <span>{{localize "planestone-importer.review.lint"}}</span>
+        </label>
+        {{#if review.fixes.length}}
+          <h4>{{localize "planestone-importer.review.fixes"}}</h4>
+          {{#each review.fixes}}
+            <label class="hunk {{#unless checked}}rejected{{/unless}}">
+              <input type="checkbox" data-fix="{{id}}" {{#if checked}}checked{{/if}} {{#if ../busy}}disabled{{/if}}>
+              <span><small class="fix-kind">{{kind}}</small> {{label}}</span>
+            </label>
+          {{/each}}
+        {{/if}}
+        {{#if review.suggestions.length}}
+          <h4>{{localize "planestone-importer.review.suggestions"}}</h4>
+          {{#each review.suggestions}}
+            <div class="suggestion">
+              <span>{{where}}</span>
+              {{#each candidates}}
+                {{#if ../../review.canPick}}
+                  <button type="button" data-pick="{{name}}" data-name="{{../name}}" {{#if ../../busy}}disabled{{/if}}>{{name}} ({{score}})</button>
+                {{else}}
+                  <span class="candidate">{{name}} ({{score}})</span>
+                {{/if}}
+              {{/each}}
+            </div>
+          {{/each}}
+        {{/if}}
+      </div>
 
       {{#if errors.length}}
         <div class="messages errors">
@@ -98,9 +150,17 @@
       </div>
     {{/if}}
 
+    {{#if hasSession}}
+      <textarea name="refinement" class="correction prose" placeholder="{{localize "planestone-importer.ai.refinePlaceholder"}}" {{#if busy}}disabled{{/if}}>{{refinement}}</textarea>
+    {{/if}}
+
     <footer class="buttons">
-      <button type="button" data-action="reset"><i class="fa-solid fa-rotate-left"></i> {{localize "planestone-importer.dialog.back"}}</button>
-      <button type="button" data-action="import" {{#unless canImport}}disabled{{/unless}}><i class="fa-solid fa-file-import"></i> {{#if busy}}{{localize "planestone-importer.dialog.importing"}}{{else}}{{localize "planestone-importer.dialog.import"}}{{/if}}</button>
+      <button type="button" data-action="reset" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-rotate-left"></i> {{localize "planestone-importer.dialog.back"}}</button>
+      {{#if hasSession}}
+        <button type="button" data-action="redo" {{#if busy}}disabled{{/if}} data-tooltip="{{localize "planestone-importer.ai.redoHint"}}"><i class="fa-solid fa-rotate"></i> {{localize "planestone-importer.ai.redo"}}</button>
+        <button type="button" data-action="refine" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-paper-plane"></i> {{localize "planestone-importer.ai.refine"}}</button>
+      {{/if}}
+      <button type="button" data-action="import" {{#unless canImport}}disabled{{/unless}}><i class="fa-solid fa-file-import"></i> {{#if importing}}{{localize "planestone-importer.dialog.importing"}}{{else}}{{localize "planestone-importer.dialog.import"}}{{/if}}</button>
     </footer>
   {{/if}}
 

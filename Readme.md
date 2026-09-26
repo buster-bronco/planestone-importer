@@ -41,10 +41,23 @@ Macro API:
 const api = game.modules.get("planestone-importer").api;
 api.openDialog();
 const { plan, results } = await api.importText(yamlString, { folderId: null, itemFolderId: null }); // folders optional, null = root
+// every prepare also takes { lint, rejectFixes }; plan.fixes and plan.suggestions list what the translator changed or couldn't find
 api.openPatchDialog(actorOrItem);
 const { plan, result } = await api.applyPatch(actor, patchYaml); // actor document or uuid
 const { plan, result } = await api.applyItemPatch(item, itemPatchYaml); // world item document or uuid
+const { plan, text, notes } = await api.promptPatch(actorOrItem, "make it level 6"); // ai patch, prepared but not applied
+const { plan, text, notes } = await api.promptSheet("a level 3 kobold trapmaster"); // ai sheet, prepared but not imported
 ```
+
+## AI prompting (optional)
+
+Set **AI provider** (Claude, OpenAI or OpenRouter) and **AI API key** in the module settings. Until both are set, none of the AI buttons show. The provider, key and model are client settings: they stay in your browser and are never saved to the world.
+
+- **Prompt Patch** (Patch dialog): describe a change. The AI gets the document's current sheet (the same YAML as **Copy sheet**) and replies with a patch. Each change is a checkbox; untick the ones you don't want, and the change list below updates to show what **Apply** will do. **Send correction** continues the conversation and tells the AI which changes you rejected. **Redo** asks the same thing again. **Edit YAML** opens the patch in the normal editor. Tick **Descriptions only** to have the AI rewrite flavor text and nothing else; it gets a much shorter prompt without the sheet format.
+- **Prompt Sheet** (Import dialog): describe something new. The AI writes a full sheet, and it goes through the normal import preview. **Refine** sends a follow-up, and **Redo** asks again.
+- **World context** (module settings → **Edit world context**): setting notes sent with every prompt, e.g. "humans don't exist; kobolds are the dominant species". The AI treats them as background: they keep names, species and tone consistent, but setting details only show up in descriptions when the request involves them. Short, focused notes work best; the dialog shows a rough token count for the text box, and a prompt warns when the whole context passes about 8,000 tokens. Type them in the text box, add `.md`/`.txt` files from the Foundry data folder, or both. Files are read fresh on every prompt, so you can keep editing them in another editor, and a missing file stops the prompt with an error. The notes and the file list are client settings, so they stay in your browser and players never receive them. (Foundry sends world and user settings to every client, so neither is private.) The files themselves are served by Foundry to anyone who knows their path, so keep secret notes in an out-of-the-way folder.
+
+Every prompt also includes the parts of the sheet format section of this readme that apply to it. The format reference and world context come first so providers can cache them between prompts. If a reply doesn't validate, the errors are sent back to the AI once automatically. Everything in a prompt is sent to the provider you picked: the sheet, your request and the world context.
 
 ## Planestone sheet format (v1)
 
@@ -151,17 +164,21 @@ Only `stealth.mod`, `meta.name` and `meta.level` are required. `[[...]]` link ma
 
 ```yaml
 - origin: compendiumRef
-  refType: action | equipment | spell
+  refType: action | equipment | spell | feat | effect
   lookup: { name: "Reactive Strike", pack: "actionspf2e" }   # pack optional
 ```
 
 Without a `pack` hint, the importer searches these packs in order and uses the first exact match (case-insensitive). If several items match, you get a warning. If nothing matches, or the `pack` hint names a pack that doesn't exist, that item is skipped with a warning and the rest of the sheet still imports.
+
+A miss says why: `no weapon named "Daggor" in pf2e.equipment-srd; did you mean Dagger (0.83)?`, or `"Shield Block" is a feat, use refType: feat` when the name exists under another `refType`. Pre-remaster names resolve to their remaster item with a warning (`Magic Missile` → `Force Barrage`, `Flat-Footed` → `Off-Guard`).
 
 | refType | packs |
 |---|---|
 | action | bestiary-ability-glossary-srd → actionspf2e → bestiary-family-ability-glossary → adventure-specific-actions |
 | equipment | equipment-srd |
 | spell | spells-srd (world items and `spellcasting` lists only; an actor's `items` rejects spells) |
+| feat | feats-srd (not on vehicles or hazards) |
+| effect | spell-effects → equipment-effects → feat-effects → other-effects |
 
 **equippedWeapon**: a pf2e weapon turned into an NPC strike.
 
@@ -288,7 +305,20 @@ Bare dice in descriptions become clickable rolls on import and patch:
 | `2d6+4 damage` | `@Damage[2d6+4] damage` |
 | `1d4 rounds` | `[[/r 1d4]] rounds` |
 
-Dice already inside `[[...]]`, `@Damage[...]`, `@Check[...]` or an html tag are left alone. Write `\2d6` to keep dice as plain text (`\2d6` inside a double-quoted YAML string). This works in item descriptions, hazard text fields and vehicle descriptions.
+Dice already inside `[[...]]`, `@Damage[...]`, `@Check[...]` or an html tag are left alone. Write `\2d6` to keep dice as plain text (`\\2d6` inside a double-quoted YAML string). This works in item descriptions, hazard text fields and vehicle descriptions. Legacy `positive`/`negative` damage becomes `vitality`/`void`.
+
+### Condition lint
+
+With **Lint conditions** ticked (a checkbox in the import and patch previews, saved per user), the text also gets:
+
+| Written | Becomes |
+| --- | --- |
+| `frightened 2` | `[[frightened 2]]` |
+| `confused` | `[[confused]]` |
+| `flat-footed` or `[[flat-footed]]` | `[[off-guard]]` |
+| `[[stupified 1]]` | `[[stupefied 1]]` |
+
+Only the first plain mention of each condition in a text is marked, and only if it isn't linked there already. Conditions that are usually ordinary words (`hostile`, `friendly`, `broken`, `observed`, …) are skipped. Every automatic change, dice included, is listed under **Automatic text fixes** in the preview; untick one to keep that text as written.
 
 ### World items (`item`, `itemBatch`)
 
@@ -453,6 +483,23 @@ set:
 - actions: `actionType`, `category`, `trigger` (needs `description` in the same `set`)
 - weapons: `runes`
 - `proficiency`, `abilityOverride` and `damageAbilityOverride` only affect NPC strikes, so they're errors here
+- any item: raw `system.*` paths and `rules` (below)
+
+**Raw paths** reach any field of any item type. **Copy sheet** on a world item lists the item's paths as comments.
+
+```yaml
+set:
+  system.level.value: 3
+  system.price.value.gp: 40
+  rules:                          # replaces the item's whole rule element list
+    - { key: FlatModifier, selector: ac, type: item, value: 1 }
+```
+
+- A path must already exist on the item, or be a new key next to real ones (`price.value.gp` when only `sp` is set). A typo gets a suggestion: `no system.levle.value; did you mean system.level.value?`
+- The value's type has to match what's there (number, string, boolean, array, object); `null` clears it.
+- Paths with their own field are errors pointing at it: `system.description` → `description`, `system.traits.value` → `traits`, and likewise `rules`, `runes`, `actionType`, `category`, `attackBonus`, `damageRolls`, `attackEffects` and the slug.
+- Each rule needs a `key`; in Foundry it's checked against pf2e's rule elements.
+- In an actor patch's `items.update`, a `set` with only raw fields matches any item type; typed fields still only match actions and strikes.
 
 Renaming an action changes its slug too. Renaming a compendium item (weapon, spell, equipment) keeps its slug so rule elements that point at it keep working. The whole patch is a single `item.update()`, so a failure leaves the item unchanged.
 

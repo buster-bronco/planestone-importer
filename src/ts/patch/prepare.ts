@@ -2,8 +2,10 @@ import type { Vocabulary } from "../build/actorData";
 import { linkHtml, resolveItem, type PreparedWeapon } from "../items";
 import type { LinkTarget } from "../linkMarks";
 import { PackIndex } from "../packIndex";
+import { newReview, type Review, type ReviewOptions, type Suggestion, type TextFix } from "../review";
 import { parseSheetText } from "../parse";
 import type { ActorPatchDoc } from "../schema";
+import { conditionLintEnabled } from "../utils";
 import { buildPatchChanges, type PatchChanges } from "./changes";
 
 export interface PreparedPatch {
@@ -21,6 +23,8 @@ export interface PatchPlan {
   patch: PreparedPatch | null;
   errors: string[];
   warnings: string[];
+  fixes: TextFix[];
+  suggestions: Suggestion[];
 }
 
 // an optional target guards against pasting a patch onto the wrong sheet
@@ -37,6 +41,7 @@ export async function preparePatch(
   index: PackIndex,
   targets: Map<string, LinkTarget>,
   vocab: Vocabulary,
+  review?: Review,
 ): Promise<PreparedPatch> {
   const name = actor.name;
   const changes = buildPatchChanges(doc, actor.toObject(), vocab);
@@ -59,11 +64,11 @@ export async function preparePatch(
   // [[term]] marks in edited descriptions
   for (const update of changes.updateItems) {
     const html = update["system.description.value"];
-    if (typeof html === "string") update["system.description.value"] = linkHtml(html, (update.name as string) ?? name, targets, warn);
+    if (typeof html === "string") update["system.description.value"] = linkHtml(html, (update.name as string) ?? name, targets, warn, review);
   }
 
   for (const item of changes.addItems) {
-    const resolved = await resolveItem(item, { index, targets, warn, fail });
+    const resolved = await resolveItem(item, { index, targets, warn, fail, review, owner: name });
     if (!resolved) continue;
     if ("weapon" in resolved) prepared.weapons.push(resolved.weapon);
     else prepared.items.push(resolved.data);
@@ -74,9 +79,10 @@ export async function preparePatch(
 }
 
 // text → one validated patch against this actor, nothing written yet
-export async function preparePatchText(actor: any, text: string, vocab: Vocabulary): Promise<PatchPlan> {
+export async function preparePatchText(actor: any, text: string, vocab: Vocabulary, options: ReviewOptions = {}): Promise<PatchPlan> {
   const parsed = parseSheetText(text);
-  const plan: PatchPlan = { patch: null, errors: [...parsed.errors], warnings: [...parsed.warnings] };
+  const review = newReview({ lint: conditionLintEnabled(), ...options });
+  const plan: PatchPlan = { patch: null, errors: [...parsed.errors], warnings: [...parsed.warnings], fixes: review.fixes, suggestions: review.suggestions };
   if (plan.errors.length) return plan;
   if (parsed.patches.length !== 1 || parsed.itemPatches.length || parsed.actors.length || parsed.vehicles.length || parsed.hazards.length || parsed.items.length || parsed.spellLists.length) {
     plan.errors.push("expected a single kind: actorPatch document");
@@ -84,7 +90,7 @@ export async function preparePatchText(actor: any, text: string, vocab: Vocabula
   }
 
   const index = new PackIndex();
-  const patch = await preparePatch(parsed.patches[0], actor, index, await index.linkTargets(), vocab);
+  const patch = await preparePatch(parsed.patches[0], actor, index, await index.linkTargets(), vocab, review);
   plan.patch = patch;
   plan.errors.push(...patch.errors);
   plan.warnings.push(...patch.warnings);

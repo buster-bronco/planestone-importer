@@ -6,15 +6,20 @@ import { executeImport, prepareImport, vocabulary, type ImportOptions } from "./
 import { executePatch } from "./patch/apply";
 import { executeItemPatch, prepareItemPatchText } from "./patch/item";
 import { preparePatchText } from "./patch/prepare";
-import { getGame, isCurrentUserGM, localize } from "./utils";
+import { splitReply } from "./ai/extract";
+import { patchSystemPrompt, sheetSystemPrompt } from "./ai/prompt";
+import { AiSession } from "./ai/session";
+import { repairErrors, type ReviewOptions } from "./review";
+import { aiSend, maskApiKey, registerSettings, worldContext } from "./settings";
+import { documentYaml, getGame, isCurrentUserGM, localize } from "./utils";
 
 function openDialog() {
   return new ImportDialog().render({ force: true });
 }
 
 // text → created actors, for macros
-async function importText(text: string, options: ImportOptions = {}) {
-  const plan = await prepareImport(text);
+async function importText(text: string, options: ImportOptions & ReviewOptions = {}) {
+  const plan = await prepareImport(text, options);
   if (plan.errors.length) return { plan, results: [] };
   return { plan, results: await executeImport(plan, options) };
 }
@@ -43,9 +48,41 @@ async function applyItemPatch(itemOrUuid: any, text: string) {
   return { plan, result: await executeItemPatch(plan.patch) };
 }
 
+// request → ai patch for one npc or world item, prepared but not applied
+async function promptPatch(documentOrUuid: any, request: string) {
+  const document = typeof documentOrUuid === "string" ? await fromUuid(documentOrUuid) : documentOrUuid;
+  const isItem = document?.documentName === "Item";
+  if (!isItem && document?.type !== "npc") throw new Error("promptPatch needs an npc actor or a world item");
+  const prepare = (text: string) => (isItem ? prepareItemPatchText(document, text) : preparePatchText(document, text, vocabulary()));
+  const system = patchSystemPrompt({ kind: isItem ? "itemPatch" : "actorPatch", sheet: documentYaml(document), context: await worldContext() });
+  const session = new AiSession(system, aiSend(), async (reply) => repairErrors(await prepare(splitReply(reply).yaml)));
+  const { yaml, notes } = splitReply(await session.ask(request));
+  return { plan: await prepare(yaml), text: yaml, notes };
+}
+
+// request → ai sheet, prepared but not imported
+async function promptSheet(request: string) {
+  const session = new AiSession(sheetSystemPrompt({ context: await worldContext() }), aiSend(), async (reply) => repairErrors(await prepareImport(splitReply(reply).yaml)));
+  const { yaml, notes } = splitReply(await session.ask(request));
+  return { plan: await prepareImport(yaml), text: yaml, notes };
+}
+
 Hooks.once("init", () => {
-  getGame().modules.get(CONSTANTS.MODULE_ID).api = { openDialog, prepareImport, executeImport, importText, openPatchDialog, applyPatch, applyItemPatch };
+  registerSettings();
+  getGame().modules.get(CONSTANTS.MODULE_ID).api = {
+    openDialog,
+    prepareImport,
+    executeImport,
+    importText,
+    openPatchDialog,
+    applyPatch,
+    applyItemPatch,
+    promptPatch,
+    promptSheet,
+  };
 });
+
+Hooks.on("renderSettingsConfig", maskApiKey);
 
 // adds the import button to the actors and items sidebar headers
 function addImportButton(_app: unknown, html: HTMLElement) {

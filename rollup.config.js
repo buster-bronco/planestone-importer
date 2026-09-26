@@ -1,5 +1,6 @@
 const fs = require("fs");
 const fsPromises = require("fs/promises");
+const path = require("path");
 const resolve = require("@rollup/plugin-node-resolve");
 const commonjs = require("@rollup/plugin-commonjs");
 const typescript = require("@rollup/plugin-typescript");
@@ -23,6 +24,7 @@ module.exports = {
     sourcemap: true,
   },
   plugins: [
+    rawText(),
     resolve({ browser: true }),
     commonjs(),
     typescript(),
@@ -58,6 +60,23 @@ module.exports = {
     },
   ],
 };
+
+// "file?raw" imports a file as a string, same as vite
+function rawText() {
+  return {
+    name: "raw-text",
+    resolveId(source, importer) {
+      if (!source.endsWith("?raw") || !importer) return null;
+      return `${path.resolve(path.dirname(importer), source.slice(0, -4))}?raw`;
+    },
+    async load(id) {
+      if (!id.endsWith("?raw")) return null;
+      const file = id.slice(0, -4);
+      this.addWatchFile(file);
+      return `export default ${JSON.stringify(await fsPromises.readFile(file, "utf-8"))};`;
+    },
+  };
+}
 
 // writes dist/module.json with version and release urls
 function updateModuleManifestPlugin() {
