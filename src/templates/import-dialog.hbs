@@ -37,6 +37,17 @@
         </table>
       {{/if}}
 
+      {{#if vehicles.length}}
+        <table class="actors">
+          <thead><tr><th>{{localize "planestone-importer.dialog.vehicle"}}</th><th>{{localize "planestone-importer.dialog.level"}}</th><th>{{localize "planestone-importer.dialog.items"}}</th></tr></thead>
+          <tbody>
+            {{#each vehicles}}
+              <tr><td>{{name}}</td><td>{{level}}</td><td>{{itemCount}}</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      {{/if}}
+
       {{#if items.length}}
         <table class="actors">
           <thead><tr><th>{{localize "planestone-importer.dialog.name"}}</th><th>{{localize "planestone-importer.dialog.type"}}</th></tr></thead>
@@ -56,7 +67,7 @@
       {{/if}}
     </div>
 
-    {{#if actors.length}}
+    {{#if hasActors}}
       <div class="form-group folder-pick">
         <label for="planestone-importer-folder">{{localize "planestone-importer.dialog.folder"}}</label>
         <select id="planestone-importer-folder" name="folder">

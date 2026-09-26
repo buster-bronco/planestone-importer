@@ -1,0 +1,37 @@
+schemaVersion: 1
+kind: vehicle
+meta:
+  name: Armada Skiff
+  level: 3
+  source: "Dev"
+
+core:
+  traits: [magical]
+  rarity: uncommon
+  size: huge
+  description: "A narrow clinker-built boat with a single lateen sail and a bronze ram at the prow."
+  price: 120
+  space: { long: 30, wide: 10, high: 15 }
+  crew: "1 pilot, 2 crew"
+  passengers: 6
+  pilotingCheck: "Athletics (DC 18) or Sailing Lore (DC 16)"
+  ac: 17
+  saves: { fortitude: 9 }
+  hardness: 5
+  hp: { value: 50, notes: "BT 25" }
+  speed: "swim 30 feet (rowed, wind)"
+  collision: { dc: 19, damage: "2d10" }
+  weaknesses: [{ type: fire, value: 5 }]
+
+items:
+  - origin: homebrew
+    type: passive
+    name: Bronze Ram
+    description: "The skiff's collision damage is piercing, and a creature hit by it is knocked [[prone]]."
+
+  - origin: homebrew
+    type: action
+    name: Hard to Port
+    actionType: 2
+    category: interaction
+    description: "The pilot attempts a piloting check to turn up to 90 degrees without moving."

@@ -1,10 +1,11 @@
 import CONSTANTS from "./constants";
 import { buildActorSystem, type Vocabulary } from "./build/actorData";
+import { buildVehicleSystem } from "./build/vehicleData";
 import { addWeaponStrike, resolveItem, sheetItemName, type PreparedWeapon } from "./items";
 import type { LinkTarget } from "./linkMarks";
 import { PackIndex } from "./packIndex";
 import { parseSheetText } from "./parse";
-import type { ActorDoc, SheetItem } from "./schema";
+import type { ActorDoc, SheetItem, VehicleDoc } from "./schema";
 import { getGame } from "./utils";
 
 export type { PreparedWeapon } from "./items";
@@ -18,6 +19,14 @@ export interface PreparedActor {
   errors: string[];
 }
 
+export interface PreparedVehicle {
+  doc: VehicleDoc;
+  system: Record<string, unknown>;
+  items: any[];
+  warnings: string[];
+  errors: string[];
+}
+
 export interface PreparedWorldItem {
   doc: SheetItem;
   data: any;
@@ -25,6 +34,7 @@ export interface PreparedWorldItem {
 
 export interface ImportPlan {
   actors: PreparedActor[];
+  vehicles: PreparedVehicle[];
   items: PreparedWorldItem[];
   errors: string[];
   warnings: string[];
@@ -43,6 +53,7 @@ export function vocabulary(): Vocabulary {
   const keys = (record: unknown) => (record && typeof record === "object" ? new Set(Object.keys(record)) : undefined);
   return {
     creatureTraits: keys(pf2e.creatureTraits),
+    vehicleTraits: keys(pf2e.vehicleTraits),
     languages: keys(pf2e.languages),
     senses: keys(pf2e.senses),
     skills: keys(pf2e.skills),
@@ -66,10 +77,26 @@ async function prepareActor(doc: ActorDoc, index: PackIndex, targets: Map<string
   return prepared;
 }
 
+async function prepareVehicle(doc: VehicleDoc, index: PackIndex, targets: Map<string, LinkTarget>, vocab: Vocabulary): Promise<PreparedVehicle> {
+  const { system, warnings } = buildVehicleSystem(doc, vocab);
+  const prepared: PreparedVehicle = { doc, system, items: [], warnings, errors: [] };
+  const name = doc.meta.name;
+  const warn = (message: string) => prepared.warnings.push(`${name}: ${message}`);
+  const fail = (message: string) => prepared.errors.push(`${name}: ${message}`);
+
+  // parse.ts already rejects strikes and weapons on vehicles
+  for (const item of doc.items) {
+    const resolved = await resolveItem(item, { index, targets, warn, fail });
+    if (resolved && "data" in resolved) prepared.items.push(resolved.data);
+  }
+
+  return prepared;
+}
+
 // parse, validate and resolve everything without touching the world
 export async function prepareImport(text: string): Promise<ImportPlan> {
   const parsed = parseSheetText(text);
-  const plan: ImportPlan = { actors: [], items: [], errors: [...parsed.errors], warnings: [...parsed.warnings] };
+  const plan: ImportPlan = { actors: [], vehicles: [], items: [], errors: [...parsed.errors], warnings: [...parsed.warnings] };
   if (parsed.patches.length) plan.errors.push("patches are applied from an npc sheet's Patch button");
   if (parsed.itemPatches.length) plan.errors.push("item patches are applied from an item sheet's Patch button");
   if (plan.errors.length) return plan;
@@ -80,6 +107,12 @@ export async function prepareImport(text: string): Promise<ImportPlan> {
   for (const doc of parsed.actors) {
     const prepared = await prepareActor(doc, index, targets, vocab);
     plan.actors.push(prepared);
+    plan.errors.push(...prepared.errors);
+    plan.warnings.push(...prepared.warnings);
+  }
+  for (const doc of parsed.vehicles) {
+    const prepared = await prepareVehicle(doc, index, targets, vocab);
+    plan.vehicles.push(prepared);
     plan.errors.push(...prepared.errors);
     plan.warnings.push(...prepared.warnings);
   }
@@ -155,6 +188,24 @@ export async function executeImport(plan: ImportPlan, options: ImportOptions = {
     } catch (err) {
       console.error(CONSTANTS.DEBUG_PREFIX, err);
       if (actor) await actor.delete().catch(() => null);
+      results.push({ name: meta.name, ok: false, error: (err as Error).message });
+    }
+  }
+
+  for (const prepared of plan.vehicles) {
+    const { meta } = prepared.doc;
+    try {
+      const actor = await Actor.implementation.create({
+        name: meta.name,
+        type: "vehicle",
+        folder,
+        system: prepared.system,
+        items: prepared.items,
+        flags: { [CONSTANTS.MODULE_ID]: { schemaVersion: 1, source: meta.source ?? null } },
+      });
+      results.push({ name: meta.name, ok: true, actorUuid: actor.uuid });
+    } catch (err) {
+      console.error(CONSTANTS.DEBUG_PREFIX, err);
       results.push({ name: meta.name, ok: false, error: (err as Error).message });
     }
   }

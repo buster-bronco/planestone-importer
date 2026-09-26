@@ -1,6 +1,6 @@
 # Planestone Importer
 
-A Foundry VTT module that imports **Planestone sheet** files (YAML or JSON) as pf2e NPC actors and world items. Built for my own game.
+A Foundry VTT module that imports **Planestone sheet** files (YAML or JSON) as pf2e NPC actors, vehicles and world items. Built for my own game.
 
 - Foundry **v13–v14**, pf2e **7.2.x**
 - GM-only **Import Sheet** button in the Actors and Items sidebars
@@ -29,7 +29,7 @@ Releases work like emotive-hud: publishing a GitHub release runs `.github/workfl
 ## Usage
 
 1. Enable the module in a pf2e world.
-2. Actors or Items sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file, or paste a sheet and hit **Load text**. Both buttons open the same dialog, and it accepts NPCs and world items.
+2. Actors or Items sidebar → **Import Sheet** → pick a `.yaml`, `.yml`, or `.json` file, or paste a sheet and hit **Load text**. Both buttons open the same dialog, and it accepts NPCs, vehicles and world items.
 3. Check the preview (actors, item counts, world items, warnings), pick destination folders (they default to the sidebar roots) → **Import**.
 4. To change an existing NPC or world item later, use **Patch** in its sheet header (see [Patches](#patches-actorpatch) and [Item patches](#item-patches-itempatch)).
 
@@ -48,16 +48,16 @@ const { plan, result } = await api.applyItemPatch(item, itemPatchYaml); // world
 
 ## Planestone sheet format (v1)
 
-See [`examples/`](examples) for complete files: `actor.yaml`, `batch.yaml`, `items.yaml`, `patch.yaml`, `item-patch.yaml` and `broken.yaml` (every validation error on purpose).
+See [`examples/`](examples) for complete files: `actor.yaml`, `vehicle.yaml`, `batch.yaml`, `items.yaml`, `patch.yaml`, `item-patch.yaml` and `broken.yaml` (every validation error on purpose).
 
 ### Envelope
 
 ```yaml
 schemaVersion: 1
-kind: actor | spellList | actorBatch | item | itemBatch | actorPatch | itemPatch
+kind: actor | vehicle | spellList | actorBatch | item | itemBatch | actorPatch | itemPatch
 ```
 
-`actorBatch` holds `actors: [...]` and `spellLists: [...]`. Actors inside a batch don't need `schemaVersion`/`kind`.
+`actorBatch` holds `actors: [...]` and `spellLists: [...]`. Actors inside a batch don't need `schemaVersion`/`kind`. A batch can mix NPCs and vehicles: give a vehicle entry `meta.actorType: vehicle`.
 
 ### Actor
 
@@ -84,6 +84,37 @@ items: [...]
 ```
 
 Senses use `name (precise|imprecise|vague) N feet`, and the acuity and range parts are optional. `alignment` is accepted but ignored because the pf2e remaster removed it.
+
+### Vehicle
+
+A pf2e vehicle actor. Use `kind: vehicle`, or `kind: actor` with `meta.actorType: vehicle`. See [`examples/vehicle.yaml`](examples/vehicle.yaml).
+
+```yaml
+meta: { name, actorType: vehicle, level, source }
+core:
+  traits: [magical]             # vehicle trait slugs (CONFIG.PF2E.vehicleTraits)
+  rarity: common
+  size: huge                    # defaults to large
+  description: "…"              # html, or plain text (wrapped in <p>)
+  price: 750                    # gp
+  space: { long: 30, wide: 20, high: 15 }   # feet
+  crew: "1 pilot, 2 crew"
+  passengers: 5                 # number or text
+  pilotingCheck: "Sailing Lore (DC 22)"
+  ac: 20
+  saves: { fortitude: 14 }      # vehicles only have fortitude
+  hardness: 5
+  hp: { value: 90, notes: "BT 45" }
+  speed: "40 feet (rowed, wind)"   # text; a bare number becomes "N feet"
+  collision: { dc: 22, damage: "4d10" }   # optional
+  emitsSound: encounter         # true | false | encounter
+  resistances: [{ type, value, exceptions: [] }]
+  weaknesses: [{ type, value }]
+  immunities: [{ type }]        # defaults to [{ type: object-immunities }]
+items: [...]
+```
+
+Only `ac`, `saves.fortitude`, `hp.value`, `meta.name` and `meta.level` are required. Vehicle `items` take homebrew `action`/`passive` entries and `compendiumRef` actions or equipment. Strikes, `equippedWeapon` and spells are errors, because pf2e vehicle sheets have no strikes; write mounted weapons as homebrew actions. Vehicles can't be patched or copied yet.
 
 ### Items
 

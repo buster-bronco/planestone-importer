@@ -51,12 +51,18 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       pasted: this.pasted,
       errors: plan?.errors ?? [],
       warnings: plan?.warnings ?? [],
-      canImport: !!plan && !plan.errors.length && plan.actors.length + plan.items.length > 0 && !this.busy,
+      hasActors: !!plan && plan.actors.length + plan.vehicles.length > 0,
+      canImport: !!plan && !plan.errors.length && plan.actors.length + plan.vehicles.length + plan.items.length > 0 && !this.busy,
       actors: (plan?.actors ?? []).map((actor) => ({
         name: actor.doc.meta.name,
         level: actor.doc.meta.level,
         itemCount: actor.items.length + actor.weapons.length,
         weaponCount: actor.weapons.length,
+      })),
+      vehicles: (plan?.vehicles ?? []).map((vehicle) => ({
+        name: vehicle.doc.meta.name,
+        level: vehicle.doc.meta.level,
+        itemCount: vehicle.items.length,
       })),
       items: (plan?.items ?? []).map((item) => ({ name: item.data.name, type: item.data.type })),
       results: await Promise.all(this.results.map(async (result) => ({ ...result, link: await this.resultLink(result) }))),
@@ -130,7 +136,7 @@ export default class ImportDialog extends HandlebarsApplicationMixin(Application
       this.plan = await prepareImport(await read());
     } catch (err) {
       console.error(CONSTANTS.DEBUG_PREFIX, err);
-      this.plan = { actors: [], items: [], errors: [(err as Error).message], warnings: [] };
+      this.plan = { actors: [], vehicles: [], items: [], errors: [(err as Error).message], warnings: [] };
     }
     this.busy = false;
     this.stage = "preview";

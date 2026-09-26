@@ -180,6 +180,84 @@ export type ActorDoc = z.infer<typeof actorBody>;
 export type CoreData = ActorDoc["core"];
 
 // ---------------------------------------------------------------------------
+// vehicle (§2b)
+// ---------------------------------------------------------------------------
+
+export const vehicleMetaSchema = z.object({
+  name: z.string().min(1),
+  actorType: z.literal("vehicle").default("vehicle"),
+  level: z.number().int().min(-1).max(30),
+  source: z.string().optional(),
+});
+
+// vehicle speed is free text in pf2e; a bare number means feet
+const vehicleSpeed = z.union([z.string(), z.number().int().min(0).transform((feet) => `${feet} feet`)]);
+
+export const vehicleCoreSchema = z.object({
+  traits: z.array(z.string()).default([]),
+  rarity: z.enum(["common", "uncommon", "rare", "unique"]).default("common"),
+  size: z.string().default("large"),
+  description: z.string().default(""),
+  // gp
+  price: z.number().min(0).default(0),
+  // feet
+  space: z
+    .object({
+      long: z.number().min(0).default(0),
+      wide: z.number().min(0).default(0),
+      high: z.number().min(0).default(0),
+    })
+    .default({}),
+  crew: z.string().default(""),
+  passengers: z.union([z.string(), z.number().int().min(0).transform(String)]).default(""),
+  pilotingCheck: z.string().default(""),
+  ac: z.number().int(),
+  // vehicles only roll fortitude
+  saves: z.object({ fortitude: z.number().int() }).strict(),
+  hardness: z.number().int().min(0).default(0),
+  hp: z.object({
+    value: z.number().int().positive(),
+    notes: z.string().optional(),
+  }),
+  speed: vehicleSpeed.default(""),
+  collision: z.object({ dc: z.number().int(), damage: z.string().min(1) }).optional(),
+  emitsSound: z.union([z.boolean(), z.literal("encounter")]).default("encounter"),
+  resistances: z.array(resistanceEntry).default([]),
+  weaknesses: z.array(weaknessEntry).default([]),
+  // every pf2e vehicle carries object immunities
+  immunities: z.array(immunityEntry).default([{ type: "object-immunities" }]),
+});
+
+const vehicleBody = z.object({
+  meta: vehicleMetaSchema,
+  core: vehicleCoreSchema,
+  items: z.array(sheetItem).default([]),
+});
+
+export type VehicleDoc = z.infer<typeof vehicleBody>;
+export type VehicleCoreData = VehicleDoc["core"];
+
+export function isVehicleDoc(doc: ActorDoc | VehicleDoc): doc is VehicleDoc {
+  return doc.meta.actorType === "vehicle";
+}
+
+// batch entries split on meta.actorType (or kind), parsed in a second step like homebrew items
+const batchActor = z
+  .object({
+    kind: z.enum(["actor", "vehicle"]).optional(),
+    meta: z.object({ actorType: z.enum(["npc", "vehicle"]).optional() }).passthrough(),
+  })
+  .passthrough()
+  .transform((value, ctx): ActorDoc | VehicleDoc => {
+    const { kind, ...fields } = value;
+    const isVehicle = kind === "vehicle" || value.meta.actorType === "vehicle";
+    const parsed = (isVehicle ? vehicleBody : actorBody).safeParse(fields);
+    if (parsed.success) return parsed.data;
+    for (const issue of parsed.error.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, path: issue.path, message: issue.message });
+    return z.NEVER;
+  });
+
+// ---------------------------------------------------------------------------
 // actor patch (§6)
 // ---------------------------------------------------------------------------
 
@@ -264,6 +342,7 @@ const envelope = { schemaVersion: z.literal(1) };
 
 export const sheetFile = z.discriminatedUnion("kind", [
   actorBody.extend({ ...envelope, kind: z.literal("actor") }),
+  vehicleBody.extend({ ...envelope, kind: z.literal("vehicle") }),
   spellListBody.extend({ ...envelope, kind: z.literal("spellList") }),
   actorPatchBody.extend({ ...envelope, kind: z.literal("actorPatch") }),
   itemPatchBody.extend({ ...envelope, kind: z.literal("itemPatch") }),
@@ -273,7 +352,7 @@ export const sheetFile = z.discriminatedUnion("kind", [
   z.object({
     ...envelope,
     kind: z.literal("actorBatch"),
-    actors: z.array(actorBody.extend({ kind: z.literal("actor").optional() })).min(1),
+    actors: z.array(batchActor).min(1),
     spellLists: z.array(spellListBody.extend({ kind: z.literal("spellList").optional() })).default([]),
   }),
 ]);

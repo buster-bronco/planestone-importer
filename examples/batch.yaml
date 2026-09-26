@@ -44,3 +44,16 @@ actors:
         abilityOverride: int
         damageAbilityOverride: int
     spellcasting: armada-occult
+
+  - meta: { name: Armada Longboat, actorType: vehicle, level: 2 }
+    core:
+      size: huge
+      space: { long: 40, wide: 10, high: 10 }
+      crew: "1 pilot, 4 crew"
+      passengers: 10
+      pilotingCheck: "Sailing Lore (DC 17)"
+      ac: 15
+      saves: { fortitude: 8 }
+      hardness: 5
+      hp: { value: 40 }
+      speed: "swim 20 feet (rowed)"

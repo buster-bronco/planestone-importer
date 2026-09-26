@@ -4,6 +4,7 @@ import { sluggify } from "../slug";
 // valid slugs pulled from CONFIG.PF2E at import time; omitted sets skip the check
 export interface Vocabulary {
   creatureTraits?: Set<string>;
+  vehicleTraits?: Set<string>;
   languages?: Set<string>;
   senses?: Set<string>;
   skills?: Set<string>;

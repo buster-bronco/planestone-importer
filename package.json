@@ -1,7 +1,7 @@
 {
   "name": "planestone-importer",
   "version": "0.1.0",
-  "description": "Imports Planestone sheet files as pf2e NPCs and world items in Foundry VTT",
+  "description": "Imports Planestone sheet files as pf2e NPCs, vehicles and world items in Foundry VTT",
   "license": "MIT",
   "private": true,
   "scripts": {

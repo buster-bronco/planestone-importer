@@ -1,7 +1,7 @@
 {
   "id": "planestone-importer",
   "title": "Planestone Importer",
-  "description": "Imports Planestone sheet files (YAML/JSON) as pf2e NPCs and world items.",
+  "description": "Imports Planestone sheet files (YAML/JSON) as pf2e NPCs, vehicles and world items.",
   "version": "0.1.0",
   "compatibility": { "minimum": "13", "verified": "14", "maximum": "14" },
   "relationships": {

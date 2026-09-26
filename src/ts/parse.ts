@@ -4,6 +4,7 @@ import { normalizeOps } from "./patch/paths";
 import {
   isHomebrewAction,
   isHomebrewStrike,
+  isVehicleDoc,
   sheetFile,
   sheetItem,
   type ActorDoc,
@@ -11,6 +12,7 @@ import {
   type ItemPatchDoc,
   type SheetItem,
   type SpellListDoc,
+  type VehicleDoc,
 } from "./schema";
 import { sluggify } from "./slug";
 
@@ -29,6 +31,7 @@ export const BUILTIN_ATTACK_EFFECTS = new Set([
 
 export interface ParsedSheet {
   actors: ActorDoc[];
+  vehicles: VehicleDoc[];
   patches: ActorPatchDoc[];
   // world items, not attached to an actor
   items: SheetItem[];
@@ -45,7 +48,7 @@ function formatIssue(issue: ZodIssue): string {
 
 // yaml is a superset of json, so one loader covers both
 export function parseSheetText(text: string): ParsedSheet {
-  const result: ParsedSheet = { actors: [], patches: [], items: [], itemPatches: [], spellLists: [], errors: [], warnings: [] };
+  const result: ParsedSheet = { actors: [], vehicles: [], patches: [], items: [], itemPatches: [], spellLists: [], errors: [], warnings: [] };
 
   let raw: unknown;
   try {
@@ -55,7 +58,7 @@ export function parseSheetText(text: string): ParsedSheet {
     return result;
   }
 
-  const parsed = sheetFile.safeParse(raw);
+  const parsed = sheetFile.safeParse(asVehicleKind(raw));
   if (!parsed.success) {
     result.errors.push(...parsed.error.issues.map(formatIssue));
     return result;
@@ -63,6 +66,7 @@ export function parseSheetText(text: string): ParsedSheet {
 
   const doc = parsed.data;
   if (doc.kind === "actor") result.actors.push(doc);
+  else if (doc.kind === "vehicle") result.vehicles.push(doc);
   else if (doc.kind === "spellList") result.spellLists.push(doc);
   else if (doc.kind === "actorPatch") result.patches.push(doc);
   else if (doc.kind === "itemPatch") result.itemPatches.push(doc);
@@ -76,7 +80,10 @@ export function parseSheetText(text: string): ParsedSheet {
     }
     result.items.push(item.data);
   } else {
-    result.actors.push(...doc.actors);
+    for (const actor of doc.actors) {
+      if (isVehicleDoc(actor)) result.vehicles.push(actor);
+      else result.actors.push(actor);
+    }
     result.spellLists.push(...doc.spellLists);
   }
 
@@ -85,9 +92,17 @@ export function parseSheetText(text: string): ParsedSheet {
   }
 
   for (const actor of result.actors) checkActor(actor, result);
+  for (const vehicle of result.vehicles) checkVehicle(vehicle, result);
   for (const patch of result.patches) checkPatch(patch, result);
   result.items.forEach((item, index) => checkWorldItem(item, doc.kind === "itemBatch" ? `items.${index}` : "(root)", result));
   return result;
+}
+
+// kind: actor with meta.actorType: vehicle reads as kind: vehicle
+function asVehicleKind(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const doc = raw as Record<string, any>;
+  return doc.kind === "actor" && doc.meta?.actorType === "vehicle" ? { ...doc, kind: "vehicle" } : raw;
 }
 
 export function patchLabel(patch: ActorPatchDoc): string {
@@ -107,6 +122,18 @@ function checkWorldItem(item: SheetItem, where: string, result: ParsedSheet): vo
   } else if (isHomebrewStrike(item)) {
     result.errors.push(`${where}: "${item.name}" is a strike; strikes only exist on actors`);
   }
+}
+
+// vehicles hold actions and gear; pf2e vehicle sheets have no strikes
+function checkVehicle(vehicle: VehicleDoc, result: ParsedSheet): void {
+  const name = vehicle.meta.name;
+  vehicle.items.forEach((item, index) => {
+    if (item.origin === "equippedWeapon" || isHomebrewStrike(item)) {
+      result.errors.push(`${name}: items.${index}: vehicles can't hold strikes; describe mounted weapons as homebrew actions`);
+    } else if (item.origin === "compendiumRef" && item.refType === "spell") {
+      result.errors.push(`${name}: items.${index}: vehicles can't hold spells`);
+    }
+  });
 }
 
 // ok: an action on the actor; builtin: pf2e knows it without one; unknown: neither
