@@ -1,3 +1,4 @@
+import { applyAutoRolls } from "../autoRolls";
 import type { VehicleDoc } from "../schema";
 import { sluggify } from "../slug";
 import { buildImmunities, buildResistances, buildWeaknesses, normalizeSize, type Vocabulary, type Warn } from "./actorData";
@@ -43,7 +44,7 @@ export function buildVehicleSystem(doc: VehicleDoc, vocab: Vocabulary = {}): Veh
     attributes,
     details: {
       level: { value: meta.level },
-      description: toHtml(core.description),
+      description: applyAutoRolls(toHtml(core.description)),
       price: core.price,
       space: core.space,
       crew: core.crew,

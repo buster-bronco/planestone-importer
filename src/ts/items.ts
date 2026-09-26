@@ -3,6 +3,7 @@ import { buildHomebrewAction, buildHomebrewStrike } from "./build/homebrew";
 import { applyInventory, buildHomebrewGear } from "./build/gearData";
 import { buildHomebrewSpell } from "./build/spellData";
 import { computeStrike, dieFromDamage, type StrikeFlag, type StrikeStats } from "./build/strikeMath";
+import { applyAutoRolls } from "./autoRolls";
 import { applyLinkMarks, type LinkTarget } from "./linkMarks";
 import { normalizePackId, type PackIndex } from "./packIndex";
 import { isHomebrewGear, isHomebrewSpell, isHomebrewStrike, type EquippedWeaponItem, type SheetItem, type SpellRef } from "./schema";
@@ -32,7 +33,7 @@ async function compendiumItemData(uuid: string): Promise<any> {
 export function linkHtml(html: string, itemName: string, targets: Map<string, LinkTarget>, warn: (message: string) => void): string {
   const result = applyLinkMarks(html, (name) => targets.get(name) ?? null);
   for (const term of result.unresolved) warn(`"${itemName}": no condition or action named "${term}", left as plain text`);
-  return result.html;
+  return applyAutoRolls(result.html);
 }
 
 function linkDescription(itemData: any, targets: Map<string, LinkTarget>, warn: (message: string) => void): void {

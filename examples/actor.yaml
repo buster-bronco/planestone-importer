@@ -56,7 +56,7 @@ items:
     actionType: 1
     category: offensive
     traits: [attack]
-    description: "<p>The warden slams the target. It must succeed at a @Check[fortitude|dc:21] save or fall [[prone]].</p>"
+    description: "<p>The warden slams the target. It deals 2d8+6 bludgeoning damage and must succeed at a @Check[fortitude|dc:21] save or fall [[prone]].</p>"
 
   - origin: homebrew
     type: action

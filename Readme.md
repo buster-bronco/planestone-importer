@@ -276,6 +276,20 @@ Mark a term with `[[...]]` to link it:
 
 Marks are looked up in `conditionitems`, then `actionspf2e`, and become `@UUID[...]{Stupefied 1}`. Unknown terms are left as plain text with a warning. Foundry inline rolls are left alone: `[[/r 1d6]]`, `[[/gmr …]]`, `[[2d6]]`, and any mark followed by `{label}`. Unmarked text is never linked.
 
+### Automatic rolls
+
+Bare dice in descriptions become clickable rolls on import and patch:
+
+| Written | Becomes |
+| --- | --- |
+| `2d6 fire damage` | `@Damage[2d6[fire]] damage` |
+| `1d6 persistent bleed damage` | `@Damage[1d6[persistent,bleed]] damage` |
+| `1d8+4 slashing damage` | `@Damage[(1d8+4)[slashing]] damage` |
+| `2d6+4 damage` | `@Damage[2d6+4] damage` |
+| `1d4 rounds` | `[[/r 1d4]] rounds` |
+
+Dice already inside `[[...]]`, `@Damage[...]`, `@Check[...]` or an html tag are left alone. Write `\2d6` to keep dice as plain text (`\2d6` inside a double-quoted YAML string). This works in item descriptions, hazard text fields and vehicle descriptions.
+
 ### World items (`item`, `itemBatch`)
 
 World items land in the Items sidebar instead of on an NPC. They use the same item entries as an actor's `items`, with a few limits:
