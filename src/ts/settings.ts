@@ -16,7 +16,7 @@ export function registerSettings() {
     scope: "client",
     config: true,
     type: String,
-    choices: { none: key("aiProvider.none"), anthropic: key("aiProvider.anthropic"), openai: key("aiProvider.openai") },
+    choices: { none: key("aiProvider.none"), anthropic: key("aiProvider.anthropic"), openai: key("aiProvider.openai"), openrouter: key("aiProvider.openrouter") },
     default: "none",
   });
   settings.register(ID, "aiApiKey", {

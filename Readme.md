@@ -50,7 +50,7 @@ const { plan, text, notes } = await api.promptSheet("a level 3 kobold trapmaster
 
 ## AI prompting (optional)
 
-Set **AI provider** (Claude or OpenAI) and **AI API key** in the module settings. Until both are set, none of the AI buttons show. The provider, key and model are client settings: they stay in your browser and are never saved to the world.
+Set **AI provider** (Claude, OpenAI or OpenRouter) and **AI API key** in the module settings. Until both are set, none of the AI buttons show. The provider, key and model are client settings: they stay in your browser and are never saved to the world.
 
 - **Prompt Patch** (Patch dialog): describe a change. The AI gets the document's current sheet (the same YAML as **Copy sheet**) and replies with a patch. Each change is a checkbox; untick the ones you don't want, and the change list below updates to show what **Apply** will do. **Send correction** continues the conversation and tells the AI which changes you rejected. **Redo** asks the same thing again. **Edit YAML** opens the patch in the normal editor.
 - **Prompt Sheet** (Import dialog): describe something new. The AI writes a full sheet, and it goes through the normal import preview. **Refine** sends a follow-up, and **Redo** asks again.

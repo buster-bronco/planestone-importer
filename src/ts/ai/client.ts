@@ -1,4 +1,4 @@
-export type Provider = "anthropic" | "openai";
+export type Provider = "anthropic" | "openai" | "openrouter";
 
 export interface AiConfig {
   provider: Provider;
@@ -16,6 +16,8 @@ export interface ChatMessage {
 export const DEFAULT_MODELS: Record<Provider, string> = {
   anthropic: "claude-sonnet-5",
   openai: "gpt-5",
+  // openrouter ids are vendor/model
+  openrouter: "anthropic/claude-sonnet-5",
 };
 
 const MAX_TOKENS = 16000;
@@ -58,6 +60,27 @@ function openaiRequest(config: AiConfig, system: string, messages: ChatMessage[]
   };
 }
 
+// openrouter speaks the openai format; x-title names the app on its dashboard
+function openrouterRequest(config: AiConfig, system: string, messages: ChatMessage[]): ChatRequest {
+  const model = config.model || DEFAULT_MODELS.openrouter;
+  // anthropic models only cache with an explicit cache_control block
+  const systemContent = model.startsWith("anthropic/") ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] : system;
+  return {
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    headers: { "content-type": "application/json", authorization: `Bearer ${config.apiKey}`, "x-title": "Planestone Importer" },
+    body: {
+      model,
+      messages: [{ role: "system", content: systemContent }, ...messages.map(({ role, content }) => ({ role, content }))],
+    },
+  };
+}
+
+const REQUESTS: Record<Provider, (config: AiConfig, system: string, messages: ChatMessage[]) => ChatRequest> = {
+  anthropic: anthropicRequest,
+  openai: openaiRequest,
+  openrouter: openrouterRequest,
+};
+
 function replyText(provider: Provider, data: any): string {
   if (provider === "anthropic") {
     return (data?.content ?? [])
@@ -75,7 +98,7 @@ export async function sendChat(
   messages: ChatMessage[],
   fetcher: typeof fetch = (...args) => fetch(...args),
 ): Promise<string> {
-  const request = config.provider === "anthropic" ? anthropicRequest(config, system, messages) : openaiRequest(config, system, messages);
+  const request = REQUESTS[config.provider](config, system, messages);
   const response = await fetcher(request.url, { method: "POST", headers: request.headers, body: JSON.stringify(request.body) });
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(`${config.provider} ${response.status}: ${data?.error?.message ?? response.statusText}`);

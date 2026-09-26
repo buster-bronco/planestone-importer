@@ -63,15 +63,16 @@
         "hint": "Turns on Prompt Patch and Prompt Sheet. Stored in this browser only.",
         "none": "Off",
         "anthropic": "Claude (Anthropic)",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "openrouter": "OpenRouter"
       },
       "aiApiKey": {
         "name": "AI API key",
-        "hint": "Your Anthropic or OpenAI key. Stored in this browser only and sent only to the chosen provider."
+        "hint": "Your Anthropic, OpenAI or OpenRouter key. Stored in this browser only and sent only to the chosen provider."
       },
       "aiModel": {
         "name": "AI model",
-        "hint": "Model id. Leave blank for the default (claude-sonnet-5 or gpt-5)."
+        "hint": "Model id. Leave blank for the default (claude-sonnet-5, gpt-5, or anthropic/claude-sonnet-5 on OpenRouter). OpenRouter ids look like vendor/model."
       },
       "aiWorldContext": {
         "name": "AI world context",

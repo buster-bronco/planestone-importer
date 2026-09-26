@@ -218,6 +218,24 @@ describe("sendChat", () => {
     expect(body.messages[0]).toEqual({ role: "system", content: "sys" });
   });
 
+  it("calls openrouter, caching the system prompt for anthropic models", async () => {
+    const fetcher = reply({ choices: [{ message: { content: "ok" } }] });
+    expect(await sendChat({ provider: "openrouter", apiKey: "k", model: "" }, "sys", messages, fetcher)).toBe("ok");
+    const [url, init] = fetcher.mock.calls[0] as any;
+    const body = JSON.parse(init.body);
+    expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(init.headers.authorization).toBe("Bearer k");
+    expect(body.model).toBe("anthropic/claude-sonnet-5");
+    expect(body.messages[0].content[0]).toMatchObject({ text: "sys", cache_control: { type: "ephemeral" } });
+  });
+
+  it("sends a plain system prompt to other openrouter models", async () => {
+    const fetcher = reply({ choices: [{ message: { content: "ok" } }] });
+    await sendChat({ provider: "openrouter", apiKey: "k", model: "google/gemini-3-pro" }, "sys", messages, fetcher);
+    const body = JSON.parse((fetcher.mock.calls[0] as any)[1].body);
+    expect(body.messages[0]).toEqual({ role: "system", content: "sys" });
+  });
+
   it("surfaces the api error message", async () => {
     const fetcher = reply({ error: { message: "invalid x-api-key" } }, false);
     await expect(sendChat({ provider: "anthropic", apiKey: "k", model: "" }, "sys", messages, fetcher)).rejects.toThrow("anthropic 401: invalid x-api-key");
